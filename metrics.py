@@ -13,6 +13,8 @@ from itertools import combinations
 from pyrouge import Rouge155
 from pyrouge.utils import log
 
+import tensorflow as tf
+
 #python pkg - should work for both tf and pytorch provided that
 #it fits with the expected datatype/struct of tf
 #https://pypi.org/project/rouge/
@@ -42,6 +44,36 @@ from fastNLP.core.metrics import MetricBase
 
 _ROUGE_PATH = '/path/to/RELEASE-1.5.5'
 
+def loss(margin):
+    """Provides 'constrastive_loss' an enclosing scope with variable 'margin'.
+
+    Arguments:
+        margin: Integer, defines the baseline for distance for which pairs
+                should be classified as dissimilar. - (default is 1).
+
+    Returns:
+        'constrastive_loss' function with data ('margin') attached.
+    """
+
+    # Contrastive loss = mean( (1-true_value) * square(prediction) +
+    #                         true_value * square( max(margin-prediction, 0) ))
+    def contrastive_loss(x1, x2,y):
+        """Calculates the constrastive loss.
+
+        Arguments:
+            y_true: List of labels, each label is of type float32.
+            y_pred: List of predictions of same length as of y_true,
+                    each label is of type float32.
+
+        Returns:
+            A tensor containing constrastive loss as floating point value.
+        """
+        #is this supposed to be a dot so that margin can be a scalar?
+        my_loss = tf.math.maximum(0,-y*(x1-x2)+margin)
+        return my_loss
+
+    return contrastive_loss
+
 #LossBase, the base class for all losses defined in the fastNLP package,
 #serves as the parent class
 class MarginRankingLoss(LossBase):      
@@ -56,8 +88,7 @@ class MarginRankingLoss(LossBase):
         self.margin = margin
 
         #pytorch version of layers for this type of loss
-        #?
-        self.loss_func = torch.nn.MarginRankingLoss(margin)
+
 
     def get_loss(self, score, summary_score):
         
@@ -67,37 +98,43 @@ class MarginRankingLoss(LossBase):
         # by the variable argument size.
 
 
-        ones = torch.ones(score.size()).cuda(score.device)
+        ones = tf.ones(score.shape()).cuda(score.device)
 
         #link below details the equations
         #https://pytorch.org/docs/stable/generated/torch.nn.MarginRankingLoss.html
-        loss_func = torch.nn.MarginRankingLoss(0.0)
-        TotalLoss = loss_func(score, score, ones)
+        #loss_func = torch.nn.MarginRankingLoss(0.0)
+        loss_func = loss(0.0)
+
+        TotalLoss = loss_func(0,score, score, ones)
 
         # candidate loss
-        n = score.size(1)
+        n = score.shape(1)
         for i in range(1, n):
             #includes all but i last vals in seq
             pos_score = score[:, :-i]
 
             #includes only first i values in 2nd dim of seq
             neg_score = score[:, i:]
-            pos_score = pos_score.contiguous().view(-1)
-            neg_score = neg_score.contiguous().view(-1)
-            ones = torch.ones(pos_score.size()).cuda(score.device)
-            loss_func = torch.nn.MarginRankingLoss(self.margin * i)
+            pos_score = pos_score.reshape(-1)
+            neg_score = neg_score.reshape(-1)
+            ones = tf.ones(pos_score.shape()).cuda(score.device)
+            # loss_func = torch.nn.MarginRankingLoss(self.margin * i)
+            loss_func = loss(self.margin * i)
 
             #seems to add this new loss_fun value to a list of loss
             #values
+            #used self.margin*i to mimic initial implementation
             TotalLoss += loss_func(pos_score, neg_score, ones)
 
         # gold summary loss
-        pos_score = summary_score.unsqueeze(-1).expand_as(score)
+        pos_score = tf.expand_dims(summary_score,-1).broadcast_to(score.shape)
         neg_score = score
-        pos_score = pos_score.contiguous().view(-1)
-        neg_score = neg_score.contiguous().view(-1)
-        ones = torch.ones(pos_score.size()).cuda(score.device)
-        loss_func = torch.nn.MarginRankingLoss(0.0)
+        pos_score = pos_score.reshape(-1)
+        neg_score = neg_score.reshape(-1)
+        ones = tf.ones(pos_score.shape()).cuda(score.device)
+        # loss_func = torch.nn.MarginRankingLoss(0.0)
+        loss_func = loss(0.0)
+
         TotalLoss += loss_func(pos_score, neg_score, ones)
         
         return TotalLoss
@@ -133,20 +170,22 @@ class ValidMetric(MetricBase):
         return (scores[0]['rouge-1']['f'] + scores[0]['rouge-2']['f'] + scores[0]['rouge-l']['f']) / 3
 
     def evaluate(self, score):
-        batch_size = score.size(0)
+        batch_size = score.shape(0)
         #torch.max: Returns the maximum value of all elements in the 
         # input tensor. does along 1st dim
-        #torch.sum: Returns the sum of all elements in the input tensor.
+        #tf.math.reduce_sum: Returns the sum of all elements in the input tensor.
         #converst all of that to an int
         #then appends that calculated val to the list
         #indices seems to be pulling the max values within that set of indices
-        self.top1_correct += int(torch.sum(torch.max(score, dim=1).indices == 0))
-        self.top6_correct += int(torch.sum(torch.max(score, dim=1).indices <= 5))
-        self.top10_correct += int(torch.sum(torch.max(score, dim=1).indices <= 9))
+        #tf.math.reduce_max computes tf.math.maximum of elements across dimensions of a tensor
+
+        self.top1_correct += int(tf.math.reduce_sum(tf.math.reduce_max(score, axis=1).indices == 0))
+        self.top6_correct += int(tf.math.reduce_sum(tf.math.reduce_max(score, axis=1).indices <= 5))
+        self.top10_correct += int(tf.math.reduce_sum(tf.math.reduce_max(score, axis=1).indices <= 9))
 
         # Fast ROUGE
         for i in range(batch_size):
-            max_idx = int(torch.max(score[i], dim=0).indices)
+            max_idx = int(tf.math.reduce_max(score[i], axis=0).indices)
             if max_idx >= len(self.data[self.cur_idx]['indices']):
                 self.Error += 1 # Check if the candidate summary generated by padding is selected
                 self.cur_idx += 1
@@ -194,7 +233,7 @@ class MatchRougeMetric(MetricBase):
 
     
     def evaluate(self, score):
-        ext = int(torch.max(score, dim=1).indices) # batch_size = 1
+        ext = int(tf.math.reduce_max(score, axis=1).indices) # batch_size = 1
         self.ext.append(ext)
         self.cur_idx += 1
         print('{}/{} ({:.2f}%) decoded in {} seconds\r'.format(
