@@ -19,7 +19,7 @@ class MatchSumLoader(JsonLoader):
         self.max_len = max_len
         self.encoder = encoder
 
-        if encoder == 'bert':
+        if encoder == 'bert' or encoder == 'distilbert':
             self.sep_id = [102] # '[SEP]' (BERT)
         else:
             self.sep_id = [2] # '</s>' (RoBERTa)
