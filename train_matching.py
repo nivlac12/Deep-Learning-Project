@@ -75,7 +75,7 @@ def train_model(args):
     print(train_params)
 
     model.fit(
-        x=[train_cand_dataset, train_text_dataset, train_summ_dataset], # not sure what data structure this is
+        x=[train_text_dataset, train_cand_dataset, train_summ_dataset], # not sure what data structure this is
         y=None,
         batch_size=args.batch_size,
         epochs=args.n_epochs,
