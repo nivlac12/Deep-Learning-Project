@@ -20,94 +20,27 @@ import tensorflow as tf
 #https://pypi.org/project/rouge/
 from rouge import Rouge
 
-#FastNLP is a modular Natural Language Processing system based on PyTorch, built for fast development of NLP models.
-#note: from the pypi page, doesn't appear to to be implemented in tf
-#also, the pypi page is in chinese lol, so you are better off reading the
-#document below
-#https://readthedocs.org/projects/zyfeng-fastnlp/downloads/pdf/v0.3.0/
-#LossBase is the base class for all losses
-from fastNLP.core.losses import LossBase
-
-# MetricBase handles validity check of its input dictionaries - pred_dict and target_dict.
-# pred_dict is the output of forward() or prediction function of a model. target_dict is the ground
-# truth from DataSet where is_target is set True. MetricBase will do the following type checks:
-# 1. whether self.evaluate has varargs, which is not supported.
-# 3.1. fastNLP 19
-# fastNLP Documentation, Release 0.2
-# 2. whether params needed by self.evaluate is not included in pred_dict, target_dict.
-# 3. whether params needed by self.evaluate duplicate in pred_dict, target_dict.
-# 4. whether params in pred_dict, target_dict are not used by evaluate.(Might cause warning)
-# Besides, before passing params into self.evaluate, this function will filter out params from output_dict and
-# target_dict which are not used in self.evaluate. (but if **kwargs presented in self.evaluate, no filtering will be
-# conducted.) However, in some cases where type check is not necessary, _fast_param_map will be used.
 from fastNLP.core.metrics import MetricBase
 
 _ROUGE_PATH = '/path/to/RELEASE-1.5.5'
 
-def loss(margin):
-    """Provides 'constrastive_loss' an enclosing scope with variable 'margin'.
+def margin_ranking_loss(margin):
+    """Provides 'margin_ranking_loss' an enclosing scope with variable 'margin'.
 
     Arguments:
         margin: Integer, defines the baseline for distance for which pairs
                 should be classified as dissimilar. - (default is 1).
 
     Returns:
-        'constrastive_loss' function with data ('margin') attached.
+        'get_loss' function with data ('margin') attached.
     """
 
-    # Contrastive loss = mean( (1-true_value) * square(prediction) +
-    #                         true_value * square( max(margin-prediction, 0) ))
-    def contrastive_loss(x1, x2,y):
-        """Calculates the constrastive loss.
+    def get_loss(score, summary_score):
 
-        Arguments:
-            y_true: List of labels, each label is of type float32.
-            y_pred: List of predictions of same length as of y_true,
-                    each label is of type float32.
-
-        Returns:
-            A tensor containing constrastive loss as floating point value.
-        """
-        #is this supposed to be a dot so that margin can be a scalar?
-        #from trial-and-error, it appears that you need to take the mean
-        # of these values.... ohhhhh, is 20 the batch size??
-        my_loss = tf.math.reduce_mean(tf.maximum(0,-y*(x1-x2)+margin))
-        return my_loss
-
-    return contrastive_loss
-
-#LossBase, the base class for all losses defined in the fastNLP package,
-#serves as the parent class
-class MarginRankingLoss(LossBase):      
-    
-    def __init__(self, margin, score=None, summary_score=None):
-        #I think __init__ here pulls the vars in the existing LossBase pkg
-        #?
-        super(MarginRankingLoss, self).__init__()
-        self._init_param_map(score=score, summary_score=summary_score)
-
-        #assigns to self var so var initialzed can be used elsewhere
-        self.margin = margin
-
-        #pytorch version of layers for this type of loss
-
-
-    def get_loss(self, score, summary_score):
+        y = tf.ones(score.shape())
         
-        # equivalent to initializing TotalLoss to 0
-        # here is to avoid that some special samples will not go into the following for loop
-        #Returns a tensor filled with the scalar value 1, with the shape defined 
-        # by the variable argument size.
+        TotalLoss = tf.math.reduce_mean(tf.maximum(0,-y*(score-score)+0))
 
-
-        ones = tf.ones(score.shape()).cuda(score.device)
-
-        #link below details the equations
-        #https://pytorch.org/docs/stable/generated/torch.nn.MarginRankingLoss.html
-        #loss_func = torch.nn.MarginRankingLoss(0.0)
-        loss_func = loss(0.0)
-
-        TotalLoss = loss_func(0,score, score, ones)
 
         # candidate loss
         n = score.shape(1)
@@ -119,27 +52,23 @@ class MarginRankingLoss(LossBase):
             neg_score = score[:, i:]
             pos_score = pos_score.reshape(-1)
             neg_score = neg_score.reshape(-1)
-            ones = tf.ones(pos_score.shape()).cuda(score.device)
-            # loss_func = torch.nn.MarginRankingLoss(self.margin * i)
-            loss_func = loss(self.margin * i)
+            y = tf.ones(pos_score.shape())
+            TotalLoss += tf.math.reduce_mean(tf.maximum(0,-y*(pos_score-neg_score) + margin * i))
 
-            #seems to add this new loss_fun value to a list of loss
-            #values
-            #used self.margin*i to mimic initial implementation
-            TotalLoss += loss_func(pos_score, neg_score, ones)
 
         # gold summary loss
         pos_score = tf.expand_dims(summary_score,-1).broadcast_to(score.shape)
         neg_score = score
         pos_score = pos_score.reshape(-1)
         neg_score = neg_score.reshape(-1)
-        ones = tf.ones(pos_score.shape()).cuda(score.device)
+        y = tf.ones(pos_score.shape())
         # loss_func = torch.nn.MarginRankingLoss(0.0)
-        loss_func = loss(0.0)
 
-        TotalLoss += loss_func(pos_score, neg_score, ones)
+        TotalLoss += tf.math.reduce_mean(tf.maximum(0,-y*(pos_score - neg_score)+0))
         
         return TotalLoss
+
+    return get_loss
 
 class ValidMetric(MetricBase):
     def __init__(self, save_path, data, score=None):
