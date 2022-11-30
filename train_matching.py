@@ -190,7 +190,7 @@ if __name__ == '__main__':
     if args.mode == 'train':
         print('Training process of MatchSum !!!')
         train_model(args)
-    else:
-        print('Testing process of MatchSum !!!')
-        test_model(args)
+    # else:
+    #     print('Testing process of MatchSum !!!')
+    #     test_model(args)
 
