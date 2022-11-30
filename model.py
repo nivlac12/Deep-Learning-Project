@@ -18,9 +18,11 @@ class MatchSum(tf.keras.model):
             self.encoder = TFRobertaModel.from_pretrained('roberta-base')
 
     def call(self, text_id, candidate_id, summary_id):
-        
         batch_size = text_id.shape(0)
         
+        # text_id = [1, 333]
+        # candidate_id = [1, 20, 91]
+        # summary_id = [1, 33]
         pad_id = 0     # for BERT or DistilBERT?
         if text_id[0][0] == 0:
             pad_id = 1 # for RoBERTa
