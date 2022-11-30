@@ -33,7 +33,8 @@ def configure_training(args):
 def train_model(args):
     
     # check if the data_path and save_path exists
-    data_paths = get_data_path(args.mode, args.encoder)
+    data_paths = get_data_path(args.mode, 'bert')
+    print(data_paths)
     for name in data_paths:
         assert exists(data_paths[name])
     if not exists(args.save_path):
@@ -42,7 +43,7 @@ def train_model(args):
     # load summarization datasets
     #imported from dataloader.py file
     train_cand_dataset, train_text_dataset, train_summ_dataset = MatchSumPipe().process_from_file(data_paths['train'])
-    test_cand_dataset, test_text_dataset, test_summ_dataset = MatchSumPipe().process_from_file(data_paths['test'])
+    test_cand_dataset, test_text_dataset, test_summ_dataset = MatchSumPipe().process_from_file(data_paths['val'])
     
     import pdb
     pdb.set_trace()
@@ -56,7 +57,7 @@ def train_model(args):
 
     # configure model
     model = MatchSum(args.candidate_num, args.encoder)
-    optimizer = tf.keras.optimizers.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0)
+    optimizer = tf.keras.optimizers.Adam( lr=0)
     
     # callbacks = [MyCallback(args), 
     #              SaveModelCallback(save_dir=args.save_path, top=5)]
@@ -74,6 +75,7 @@ def train_model(args):
     print('Start training with the following hyper-parameters:')
     print(train_params)
 
+    pdb.set_trace()
     model.fit(
         x=[train_text_dataset, train_cand_dataset, train_summ_dataset], # not sure what data structure this is
         y=None,

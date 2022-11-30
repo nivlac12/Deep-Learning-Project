@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from transformers import TFBertModel, TFRobertaModel, TFDistilBertModel
 
-class MatchSum(tf.keras.model):
+class MatchSum(tf.keras.Model):
     
     def __init__(self, candidate_num, encoder, hidden_size=768):
         super(MatchSum, self).__init__()
@@ -17,7 +17,8 @@ class MatchSum(tf.keras.model):
         else:
             self.encoder = TFRobertaModel.from_pretrained('roberta-base')
 
-    def call(self, text_id, candidate_id, summary_id):
+    def call(self, X):
+        text_id, candidate_id, summary_id = X
         batch_size = text_id.shape(0)
         
         # text_id = [1, 333]

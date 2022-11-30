@@ -6,15 +6,10 @@ import tensorflow as tf
 
 class MatchSumPipe():
 
-    def __init__(self, candidate_num, encoder, max_len=100):
+    def __init__(self, max_len=100):
         super(MatchSumPipe, self).__init__()
-        self.candidate_num = candidate_num
-        self.encoder = encoder
 
-        if encoder == 'bert' or encoder == 'distilbert':
-            self.sep_id = [102] # '[SEP]' (BERT)
-        else:
-            self.sep_id = [2] # '</s>' (RoBERTa)
+        self.sep_id = [102] # '[SEP]' (BERT)
 
         self.max_len = max_len
         
@@ -36,7 +31,7 @@ class MatchSumPipe():
 
         with open(path, 'r', encoding='utf-8') as f:
             for line_idx, line in enumerate(f):
-                if line_idx > 10000:
+                if line_idx > 100:
                     break
                 line = json.loads(line)
 
