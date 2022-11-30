@@ -41,11 +41,11 @@ def train_model(args):
     
     # load summarization datasets
     #imported from dataloader.py file
-    datasets = MatchSumPipe(args.candidate_num, args.encoder).process_from_file(data_paths)
-    print('Information of dataset is:')
-    print(datasets)
-    train_set = datasets.datasets['train']
-    valid_set = datasets.datasets['val']
+    train_cand_dataset, train_text_dataset, train_summ_dataset = MatchSumPipe().process_from_file(data_paths['train'])
+    test_cand_dataset, test_text_dataset, test_summ_dataset = MatchSumPipe().process_from_file(data_paths['test'])
+    
+    import pdb
+    pdb.set_trace()
     
     # configure training
     devices, train_params = configure_training(args)
@@ -65,6 +65,8 @@ def train_model(args):
     val_metric = [ValidMetric(save_path=args.save_path, data=read_jsonl(data_paths['val']))]
     
     assert args.batch_size % len(devices) == 0
+
+    model.compile(optimizer=optimizer, loss=criterion, metrics=val_metric)
     
     trainer = Trainer(train_data=train_set, model=model, optimizer=optimizer,
                       loss=criterion, batch_size=args.batch_size,

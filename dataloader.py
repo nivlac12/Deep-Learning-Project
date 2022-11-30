@@ -1,22 +1,14 @@
 from time import time
 from datetime import timedelta
+import json
+import pdb
+import tensorflow as tf
 
-from fastNLP.io.loader import JsonLoader
-from fastNLP.io.data_bundle import DataBundle
-from fastNLP.io.pipe.pipe import Pipe
-from fastNLP.core.const import Const
+class MatchSumPipe(Pipe):
 
-class MatchSumLoader(JsonLoader):
-    
-    def __init__(self, candidate_num, encoder, max_len=180):
-        fields = {'text_id': 'text_id',
-             'candidate_id': 'candidate_id',
-               'summary_id': 'summary_id'
-                 }
-        super(MatchSumLoader, self).__init__(fields=fields)
-        
+    def __init__(self, candidate_num, encoder, max_len=100):
+        super(MatchSumPipe, self).__init__()
         self.candidate_num = candidate_num
-        self.max_len = max_len
         self.encoder = encoder
 
         if encoder == 'bert' or encoder == 'distilbert':
@@ -24,70 +16,56 @@ class MatchSumLoader(JsonLoader):
         else:
             self.sep_id = [2] # '</s>' (RoBERTa)
 
-    def _load(self, path):
-        dataset = super(MatchSumLoader, self)._load(path)
-        return dataset
-    
-    def load(self, paths):        
+        self.max_len = max_len
         
-        def get_seq_len(instance):
-            return len(instance['text_id'])
-        
-        def sample(instance, candidate_num):
-            candidate_id = instance['candidate_id'][:candidate_num]
-            return candidate_id
-        
-        
-        def truncate_candidate_id(instance, max_len):
-            candidate_id = []
-            for i in range(len(instance['candidate_id'])):
-                if len(instance['candidate_id'][i]) > max_len:
-                    cur_id = instance['candidate_id'][i][:(max_len - 1)]
-                    cur_id += self.sep_id
-                else:
-                    cur_id = instance['candidate_id'][i]
-                candidate_id.append(cur_id)
-            return candidate_id
+    def process_from_file(self, path):
 
         print('Start loading datasets !!!')
         start = time()
-
-        # load datasets
-        datasets = {}
-        for name in paths:
-            datasets[name] = self._load(paths[name])
-            
-            if name == 'train':
-                datasets[name].apply(lambda ins: truncate_candidate_id(ins, self.max_len), new_field_name='candidate_id')
-            
-            # set input and target
-            datasets[name].set_input('text_id', 'candidate_id', 'summary_id')
-        
-            # set padding value
-            if self.encoder == 'bert':
-                pad_id = 0
-            else:
-                pad_id = 1 # for RoBERTa
-            datasets[name].set_pad_val('text_id', pad_id)
-            datasets[name].set_pad_val('candidate_id', pad_id)
-            datasets[name].set_pad_val('summary_id', pad_id)
-            
+        cand_dataset, text_dataset, summary_dataset = self._load(path)
         print('Finished in {}'.format(timedelta(seconds=time()-start)))
 
-        return DataBundle(datasets=datasets)
+        return cand_dataset, text_dataset, summary_dataset
 
-class MatchSumPipe(Pipe):
+    def _load(self, path):
+        cand_id, text_id, summ_id = [], [], []
 
-    def __init__(self, candidate_num, encoder):
-        super(MatchSumPipe, self).__init__()
-        self.candidate_num = candidate_num
-        self.encoder = encoder
+        def quickpad(arr, max):
+            paddings = [[0, max-len(arr)]]
+            return tf.pad(arr, paddings, 'CONSTANT')
 
-    def process(self, data_bundle):
+        with open(path, 'r', encoding='utf-8') as f:
+            for line_idx, line in enumerate(f):
+                if line_idx > 10000:
+                    break
+                line = json.loads(line)
 
-        return data_bundle
+                cand_id_line = line['candidate_id']
+                # skip entries that don't line up
+                if len(cand_id_line) != 20:
+                    continue
+                
+                # Truncate candidate id entries if necessary
+                new_cand_id = []
+                for id_mem in cand_id_line:
+                    if len(id_mem) > self.max_len:
+                        new_cand_id.append(id_mem[:(self.max_len - 1)] + self.sep_id)
+                    else:
+                        # pad candidate ids to max len if less than max len
+                        cand_line = quickpad(id_mem, self.max_len)
+                        new_cand_id.append(cand_line)
+                cand_id.append(new_cand_id)
+
+                # pad text line and add
+                text_line = quickpad(line['text_id'], 512)
+                text_id.append(text_line)
+
+                # pad summary line and add
+                summ_line = quickpad(line['summary_id'], 512)
+                summ_id.append(summ_line)
         
-    def process_from_file(self, paths):
-        data_bundle = MatchSumLoader(self.candidate_num, self.encoder).load(paths)
-        return self.process(data_bundle)
+        cand_id = tf.data.Dataset.from_tensor_slices(cand_id)
+        text_id = tf.data.Dataset.from_tensor_slices(text_id)
+        summ_id = tf.data.Dataset.from_tensor_slices(summ_id)
 
+        return (cand_id, text_id, summ_id)
