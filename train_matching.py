@@ -56,61 +56,102 @@ def train_model(args):
 
     # configure model
     model = MatchSum(args.candidate_num, args.encoder)
-    optimizer = Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0)
+    optimizer = tf.keras.optimizers.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0)
     
-    callbacks = [MyCallback(args), 
-                 SaveModelCallback(save_dir=args.save_path, top=5)]
-    
+    # callbacks = [MyCallback(args), 
+    #              SaveModelCallback(save_dir=args.save_path, top=5)]
+    custom_callbacks = [MyCallback(max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)]
     criterion = MarginRankingLoss(args.margin)
     val_metric = [ValidMetric(save_path=args.save_path, data=read_jsonl(data_paths['val']))]
     
     assert args.batch_size % len(devices) == 0
-
-    model.compile(optimizer=optimizer, loss=criterion, metrics=val_metric)
     
-    trainer = Trainer(train_data=train_set, model=model, optimizer=optimizer,
-                      loss=criterion, batch_size=args.batch_size,
-                      update_every=args.accum_count, n_epochs=args.n_epochs, 
-                      print_every=10, dev_data=valid_set, metrics=val_metric, 
-                      metric_key='ROUGE', validate_every=args.valid_steps, 
-                      save_path=args.save_path, device=devices, callbacks=callbacks)
-    
+    model.compile(
+        optimizer = optimizer,
+        loss = criterion,
+        metrics = val_metric
+    )
     print('Start training with the following hyper-parameters:')
     print(train_params)
-    trainer.train()
+
+    model.fit(
+        x=[train_cand_dataset, train_text_dataset, train_summ_dataset], # not sure what data structure this is
+        y=None,
+        batch_size=args.batch_size,
+        epochs=args.n_epochs,
+        verbose=1, # Can be changed
+        callbacks=custom_callbacks,
+        # validation_split=0.0,
+        # validation_data=valid_set, # not sure what data structure this is
+        shuffle=True,
+        # class_weight=None,
+        # sample_weight=None,
+        # initial_epoch=0,
+        # steps_per_epoch=None,
+        # validation_steps=None,
+        # validation_batch_size=None,
+        validation_freq=args.valid_steps,
+        # max_queue_size=10,
+        # workers=1,
+        # use_multiprocessing=False`
+    )
+    # trainer = Trainer(
+    #   train_data=train_set,
+    #   model=model, optimizer=optimizer,
+    #   loss=criterion,
+    #   batch_size=args.batch_size,
+    #   update_every=args.accum_count,
+    #   n_epochs=args.n_epochs, 
+    #   print_every=10,
+    #   dev_data=valid_set,
+    #   metrics=val_metric, 
+    #   metric_key='ROUGE',
+    #   validate_every=args.valid_steps, 
+    #   save_path=args.save_path, device=devices,
+    #   callbacks=callbacks)
+
+    # model.evaluate(
+    # #x_test,
+    # #y_test,
+    # #batch_size=128,
+    # #verbose=0, 
+    # #callbacks=tf.keras.callbacks.CallbackList(
+    # #callbacks=MyCallback(args), add_progbar=True,
+    # )
 
 
-def test_model(args):
 
-    models = os.listdir(args.save_path)
+# def test_model(args):
+
+#     models = os.listdir(args.save_path)
     
-    # load dataset
-    data_paths = get_data_path(args.mode, args.encoder)
-    #from dataloader file
-    datasets = MatchSumPipe(args.candidate_num, args.encoder).process_from_file(data_paths)
-    print('Information of dataset is:')
-    print(datasets)
-    test_set = datasets.datasets['test']
+#     # load dataset
+#     data_paths = get_data_path(args.mode, args.encoder)
+#     #from dataloader file
+#     datasets = MatchSumPipe(args.candidate_num, args.encoder).process_from_file(data_paths)
+#     print('Information of dataset is:')
+#     print(datasets)
+#     test_set = datasets.datasets['test']
     
-    # need 1 gpu for testing
-    device = int(args.gpus)
+#     # need 1 gpu for testing
+#     device = int(args.gpus)
     
-    args.batch_size = 1
+#     args.batch_size = 1
 
-    for cur_model in models:
+#     for cur_model in models:
         
-        print('Current model is {}'.format(cur_model))
+#         print('Current model is {}'.format(cur_model))
 
-        # load model
-        model = torch.load(join(args.save_path, cur_model))
+#         # load model
+#         model = torch.load(join(args.save_path, cur_model))
     
-        # configure testing
-        dec_path, ref_path = get_result_path(args.save_path, cur_model)
-        test_metric = MatchRougeMetric(data=read_jsonl(data_paths['test']), dec_path=dec_path, 
-                                  ref_path=ref_path, n_total = len(test_set))
-        tester = Tester(data=test_set, model=model, metrics=[test_metric], 
-                        batch_size=args.batch_size, device=device, use_tqdm=False)
-        tester.test()
+#         # configure testing
+#         dec_path, ref_path = get_result_path(args.save_path, cur_model)
+#         test_metric = MatchRougeMetric(data=read_jsonl(data_paths['test']), dec_path=dec_path, 
+#                                   ref_path=ref_path, n_total = len(test_set))
+#         tester = Tester(data=test_set, model=model, metrics=[test_metric], 
+#                         batch_size=args.batch_size, device=device, use_tqdm=False)
+#         tester.test()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
