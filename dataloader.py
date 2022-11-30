@@ -4,7 +4,7 @@ import json
 import pdb
 import tensorflow as tf
 
-class MatchSumPipe(Pipe):
+class MatchSumPipe():
 
     def __init__(self, candidate_num, encoder, max_len=100):
         super(MatchSumPipe, self).__init__()
