@@ -14,7 +14,7 @@ class MatchSum(tf.keras.Model):
         if encoder == 'distilbert':
             self.encoder = TFDistilBertModel.from_pretrained('distilbert-base-uncased')
         elif encoder == 'bert':
-            self.encoder = TFBertModel.from_pretrained('bert-base-uncased') 
+            self.encoder = TFBertModel.from_pretrained('bert-base-uncased')
         else:
             self.encoder = TFRobertaModel.from_pretrained('roberta-base')
 
@@ -44,7 +44,7 @@ class MatchSum(tf.keras.Model):
 
         # get summary score
         # tf.keras.metrics.CosineSimilarity or tf.keras.losses.CosineSimilarity
-        summary_score = tf.Variable(tf.keras.losses.cosine_similarity(summary_emb, doc_emb, axis=-1), trainable=True)
+        summary_score = tf.keras.losses.cosine_similarity(summary_emb, doc_emb, axis=-1)
 
         # get candidate embedding
         candidate_num = candidate_id.shape[1]
@@ -65,7 +65,7 @@ class MatchSum(tf.keras.Model):
         # doc_emb = doc_emb.unsqueeze(1).expand_as(candidate_emb)
         
         # tf.keras.metrics.CosineSimilarity or tf.keras.losses.CosineSimilarity
-        score = tf.Variable(tf.keras.losses.cosine_similarity(candidate_emb, doc_emb, axis=-1), trainable=True) # [batch_size, candidate_num]
+        score = tf.keras.losses.cosine_similarity(candidate_emb, doc_emb, axis=-1) # [batch_size, candidate_num]
         #assert score.shape == (batch_size, candidate_num)
 
         pdb.set_trace()
