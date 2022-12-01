@@ -2,7 +2,6 @@ import numpy as np
 
 import json
 from os.path import join
-import torch
 import logging
 import tempfile
 import subprocess as sp
@@ -20,7 +19,7 @@ import tensorflow as tf
 #https://pypi.org/project/rouge/
 from rouge import Rouge
 
-from fastNLP.core.metrics import MetricBase
+#from fastNLP.core.metrics import MetricBase
 
 _ROUGE_PATH = '/path/to/RELEASE-1.5.5'
 
@@ -70,10 +69,10 @@ def margin_ranking_loss(margin):
 
     return get_loss
 
-class ValidMetric(MetricBase):
+class ValidMetric():
     def __init__(self, save_path, data, score=None):
-        super(ValidMetric, self).__init__()
-        self._init_param_map(score=score)
+        #super(ValidMetric, self).__init__()
+        #self._init_param_map(score=score)
  
         self.save_path = save_path
         self.data = data
@@ -150,10 +149,10 @@ class ValidMetric(MetricBase):
             self.cur_idx = 0
         return eval_result
         
-class MatchRougeMetric(MetricBase):
+class MatchRougeMetric():
     def __init__(self, data, dec_path, ref_path, n_total, score=None):
-        super(MatchRougeMetric, self).__init__()
-        self._init_param_map(score=score)
+        #super(MatchRougeMetric, self).__init__()
+        #self._init_param_map(score=score)
         self.data        = data
         self.dec_path    = dec_path
         self.ref_path    = ref_path

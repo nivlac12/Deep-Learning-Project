@@ -59,8 +59,8 @@ class MatchSumPipe():
                 summ_line = quickpad(line['summary_id'], 512)
                 summ_id.append(summ_line)
         
-        cand_id = tf.data.Dataset.from_tensor_slices(cand_id)
-        text_id = tf.data.Dataset.from_tensor_slices(text_id)
-        summ_id = tf.data.Dataset.from_tensor_slices(summ_id)
+        cand_id = tf.convert_to_tensor(cand_id)
+        text_id = tf.convert_to_tensor(text_id)
+        summ_id = tf.convert_to_tensor(summ_id)
 
         return (cand_id, text_id, summ_id)
