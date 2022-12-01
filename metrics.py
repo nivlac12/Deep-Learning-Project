@@ -23,51 +23,35 @@ from rouge import Rouge
 
 _ROUGE_PATH = '/path/to/RELEASE-1.5.5'
 
-def margin_ranking_loss(margin):
-    """Provides 'margin_ranking_loss' an enclosing scope with variable 'margin'.
+class MarginRankingLoss(tf.keras.losses.Loss):
 
-    Arguments:
-        margin: Integer, defines the baseline for distance for which pairs
-                should be classified as dissimilar. - (default is 1).
-
-    Returns:
-        'get_loss' function with data ('margin') attached.
-    """
-
-    def get_loss(score, summary_score):
-
+    def __init__(self, margin=0.0):
+        super(MarginRankingLoss, self).__init__()
+        self.margin = margin
+    
+    def call(self, score, summary_score):
         y = tf.ones(score.shape())
-        
         TotalLoss = tf.math.reduce_mean(tf.maximum(0,-y*(score-score)+0))
-
 
         # candidate loss
         n = score.shape(1)
         for i in range(1, n):
             #includes all but i last vals in seq
-            pos_score = score[:, :-i]
-
+            pos_score = score[:, :-i].reshape(-1)
             #includes only first i values in 2nd dim of seq
-            neg_score = score[:, i:]
-            pos_score = pos_score.reshape(-1)
-            neg_score = neg_score.reshape(-1)
+            neg_score = score[:, i:].reshape(-1)
+
             y = tf.ones(pos_score.shape())
-            TotalLoss += tf.math.reduce_mean(tf.maximum(0,-y*(pos_score-neg_score) + margin * i))
+            TotalLoss += tf.math.reduce_mean(tf.maximum(0,-y*(pos_score-neg_score) + self.margin * i))
 
 
         # gold summary loss
-        pos_score = tf.expand_dims(summary_score,-1).broadcast_to(score.shape)
-        neg_score = score
-        pos_score = pos_score.reshape(-1)
-        neg_score = neg_score.reshape(-1)
+        pos_score = tf.expand_dims(summary_score,-1).broadcast_to(score.shape).reshape(-1)
+        neg_score = score.reshape(-1)
         y = tf.ones(pos_score.shape())
-        # loss_func = torch.nn.MarginRankingLoss(0.0)
-
         TotalLoss += tf.math.reduce_mean(tf.maximum(0,-y*(pos_score - neg_score)+0))
         
         return TotalLoss
-
-    return get_loss
 
 class ValidMetric():
     def __init__(self, save_path, data, score=None):
