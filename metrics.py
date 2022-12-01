@@ -30,27 +30,29 @@ class MarginRankingLoss(tf.keras.losses.Loss):
         self.margin = margin
     
     def call(self, score, summary_score):
-        y = tf.ones(score.shape())
-        TotalLoss = tf.math.reduce_mean(tf.maximum(0,-y*(score-score)+0))
+        y = tf.ones(tf.shape(score))
+        TotalLoss = tf.math.reduce_mean(tf.maximum(0.0,-y*(score-score)+0))
 
         # candidate loss
-        n = score.shape(1)
+        n = tf.shape(score)[1]
         for i in range(1, n):
             #includes all but i last vals in seq
-            pos_score = score[:, :-i].reshape(-1)
+            # pos_score = tf.reshape(score[:, :-i], -1)
+            pos_score = score[:, :-i]
             #includes only first i values in 2nd dim of seq
-            neg_score = score[:, i:].reshape(-1)
+            # neg_score = tf.reshape(score[:, i:], -1)
+            neg_score = score[:, i:]
 
-            y = tf.ones(pos_score.shape())
-            TotalLoss += tf.math.reduce_mean(tf.maximum(0,-y*(pos_score-neg_score) + self.margin * i))
-
+            y = tf.ones(tf.shape(pos_score))
+            TotalLoss += tf.math.reduce_mean(tf.maximum(0.0,-y*(pos_score-neg_score) + self.margin * tf.cast(i, dtype=tf.float32)))
 
         # gold summary loss
-        pos_score = tf.expand_dims(summary_score,-1).broadcast_to(score.shape).reshape(-1)
-        neg_score = score.reshape(-1)
-        y = tf.ones(pos_score.shape())
-        TotalLoss += tf.math.reduce_mean(tf.maximum(0,-y*(pos_score - neg_score)+0))
-        
+        # pos_score = tf.reshape(tf.expand_dims(summary_score,-1).broadcast_to(score.shape), -1)
+        # neg_score = tf.reshape(score, -1)
+        pos_score = tf.broadcast_to(tf.expand_dims(summary_score,-1), tf.shape(score))
+        neg_score = score
+        y = tf.ones(tf.shape(pos_score))
+        TotalLoss += tf.math.reduce_mean(tf.maximum(0.0,-y*(pos_score - neg_score)+0.0))
         return TotalLoss
 
 class ValidMetric():

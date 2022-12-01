@@ -1,5 +1,7 @@
 import tensorflow as tf
 import pdb
+from transformers.modeling_tf_distilbert import TFDistilBertMainLayer
+from transformers import DistilBertConfig
 
 from transformers import TFBertModel, TFRobertaModel, TFDistilBertModel
 
@@ -12,11 +14,36 @@ class MatchSum(tf.keras.Model):
         self.candidate_num  = candidate_num
         
         if encoder == 'distilbert':
-            self.encoder = TFDistilBertModel.from_pretrained('distilbert-base-uncased')
+            config = DistilBertConfig.from_pretrained('distilbert-base-uncased')
+            # self.encoder = TFDistilBertModel.from_pretrained('distilbert-base-uncased')
+            self.encoder = TFDistilBertMainLayer(config, trainable=True)
         elif encoder == 'bert':
             self.encoder = TFBertModel.from_pretrained('bert-base-uncased')
         else:
             self.encoder = TFRobertaModel.from_pretrained('roberta-base')
+
+    def train_step(self, X):
+        # Unpack the data. Its structure depends on your model and
+        # on what you pass to `fit()`.
+        X = X[0]
+
+        with tf.GradientTape() as tape:
+            score, summary_score = self(X, training=True)  # Forward pass
+            # Compute the loss value
+            # (the loss function is configured in `compile()`)
+            loss = self.compiled_loss(score, summary_score, regularization_losses=self.losses)
+
+        # Compute gradients
+
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # Update metrics (includes the metric that tracks the loss)
+        # self.compiled_metrics.update_state(y, y_pred)
+        # Return a dict mapping metric names to current value
+        # return {m.name: m.result() for m in self.metrics}
+        return {"loss": loss}
 
     def call(self, X):
         text_id, candidate_id, summary_id = X
@@ -66,7 +93,6 @@ class MatchSum(tf.keras.Model):
         
         # tf.keras.metrics.CosineSimilarity or tf.keras.losses.CosineSimilarity
         score = tf.keras.losses.cosine_similarity(candidate_emb, doc_emb, axis=-1) # [batch_size, candidate_num]
-        #assert score.shape == (batch_size, candidate_num)
+        # assert score.shape == (batch_size, candidate_num)
 
-        pdb.set_trace()
         return score, summary_score

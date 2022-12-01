@@ -73,7 +73,7 @@ def train_model(args):
     print('Start training with the following hyper-parameters:')
     print(train_params)
 
-    pdb.set_trace()
+    # pdb.set_trace()
     model.fit(
         x=[train_text_dataset, train_cand_dataset, train_summ_dataset], # not sure what data structure this is
         y=None,
