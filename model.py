@@ -1,9 +1,8 @@
 import tensorflow as tf
 import pdb
 from transformers.modeling_tf_distilbert import TFDistilBertMainLayer
-from transformers import DistilBertConfig
-
-from transformers import TFBertModel, TFRobertaModel, TFDistilBertModel
+from transformers.modeling_tf_bert import TFBertMainLayer
+from transformers import DistilBertConfig, BertConfig
 
 class MatchSum(tf.keras.Model):
     
@@ -15,12 +14,10 @@ class MatchSum(tf.keras.Model):
         
         if encoder == 'distilbert':
             config = DistilBertConfig.from_pretrained('distilbert-base-uncased')
-            # self.encoder = TFDistilBertModel.from_pretrained('distilbert-base-uncased')
             self.encoder = TFDistilBertMainLayer(config, trainable=True)
-        elif encoder == 'bert':
-            self.encoder = TFBertModel.from_pretrained('bert-base-uncased')
         else:
-            self.encoder = TFRobertaModel.from_pretrained('roberta-base')
+            config = BertConfig.from_pretrained('distilbert-base-uncased')
+            self.encoder = TFBertMainLayer(config, trainable=True)
 
     def train_step(self, X):
         # Unpack the data. Its structure depends on your model and
@@ -34,7 +31,6 @@ class MatchSum(tf.keras.Model):
             loss = self.compiled_loss(score, summary_score, regularization_losses=self.losses)
 
         # Compute gradients
-
         trainable_vars = self.trainable_variables
         gradients = tape.gradient(loss, trainable_vars)
         # Update weights
@@ -42,19 +38,19 @@ class MatchSum(tf.keras.Model):
         # Update metrics (includes the metric that tracks the loss)
         # self.compiled_metrics.update_state(y, y_pred)
         # Return a dict mapping metric names to current value
+        diction = {m.name: m.result() for m in self.metrics}
+        diction["loss"] = loss
+
         # return {m.name: m.result() for m in self.metrics}
-        return {"loss": loss}
+        return diction
 
     def call(self, X):
         text_id, candidate_id, summary_id = X
         batch_size = tf.shape(text_id)[0]
-        
         # text_id = [1, 333]
         # candidate_id = [1, 20, 91]
         # summary_id = [1, 33]
-        pad_id = 0     # for BERT or DistilBERT?
-        if text_id[0][0] == 0:
-            pad_id = 1 # for RoBERTa
+        pad_id = 0
 
         # get document embedding
         input_mask = ~(text_id == pad_id)
@@ -70,28 +66,22 @@ class MatchSum(tf.keras.Model):
         #assert summary_emb.shape == (batch_size, self.hidden_size) # [batch_size, hidden_size]
 
         # get summary score
-        # tf.keras.metrics.CosineSimilarity or tf.keras.losses.CosineSimilarity
         summary_score = tf.keras.losses.cosine_similarity(summary_emb, doc_emb, axis=-1)
 
         # get candidate embedding
         candidate_num = candidate_id.shape[1]
-        # View is a pytorch tensor method. Could be changed with transpose?
-        # candidate_id = candidate_id.view(-1, candidate_id.size(-1))
         candidate_id = tf.reshape(candidate_id, shape = (-1, candidate_id.shape[-1]))
         input_mask = ~(candidate_id == pad_id)
         candidate_emb = self.encoder(candidate_id, attention_mask=input_mask)[0]
         # View is a pytorch tensor method. Could be changed with transpose?
 
         candidate_emb = tf.reshape(candidate_emb[:,0,:], shape = (batch_size, candidate_num, self.hidden_size))
-        # candidate_emb = out[:, 0, :].view(batch_size, candidate_num, self.hidden_size)  # [batch_size, candidate_num, hidden_size]
         #assert candidate_emb.shape == (batch_size, candidate_num, self.hidden_size)
         
-        # get candidate score
-        # These are pytorch tensor commands.
-        doc_emb = tf.broadcast_to(tf.expand_dims(doc_emb, axis=0), tf.shape(candidate_emb)) # This could be the incorrect axis. Also uncertain about the broadcast to parameter input
-        # doc_emb = doc_emb.unsqueeze(1).expand_as(candidate_emb)
+        temp = tf.shape(tf.transpose(candidate_emb, [1,0,2]))
+        doc_emb = tf.broadcast_to(doc_emb, temp)
+        doc_emb = tf.transpose(doc_emb, [1,0,2])
         
-        # tf.keras.metrics.CosineSimilarity or tf.keras.losses.CosineSimilarity
         score = tf.keras.losses.cosine_similarity(candidate_emb, doc_emb, axis=-1) # [batch_size, candidate_num]
         # assert score.shape == (batch_size, candidate_num)
 
