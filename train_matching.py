@@ -5,6 +5,7 @@ import json
 from time import time
 from datetime import timedelta
 from os.path import join, exists
+import pdb
 
 from utils import read_jsonl, get_data_path, get_result_path
 
@@ -44,9 +45,6 @@ def train_model(args):
     #imported from dataloader.py file
     train_cand_dataset, train_text_dataset, train_summ_dataset = MatchSumPipe().process_from_file(data_paths['train'])
     test_cand_dataset, test_text_dataset, test_summ_dataset = MatchSumPipe().process_from_file(data_paths['val'])
-    
-    import pdb
-    pdb.set_trace()
     
     # configure training
     devices, train_params = configure_training(args)

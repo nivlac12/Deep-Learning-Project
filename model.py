@@ -20,7 +20,7 @@ class MatchSum(tf.keras.Model):
 
     def call(self, X):
         text_id, candidate_id, summary_id = X
-        batch_size = text_id.shape[0]
+        batch_size = tf.shape(text_id)[0]
         
         # text_id = [1, 333]
         # candidate_id = [1, 20, 91]
@@ -34,7 +34,6 @@ class MatchSum(tf.keras.Model):
         out = self.encoder(text_id, attention_mask=input_mask)[0] # last layer
         doc_emb = out[:, 0, :]
 
-        pdb.set_trace()
         #assert doc_emb.shape == (batch_size, self.hidden_size) # [batch_size, hidden_size]
         
         # get summary embedding
@@ -45,7 +44,7 @@ class MatchSum(tf.keras.Model):
 
         # get summary score
         # tf.keras.metrics.CosineSimilarity or tf.keras.losses.CosineSimilarity
-        summary_score = tf.keras.losses.cosine_similarity(summary_emb, doc_emb, axis=-1)
+        summary_score = tf.Variable(tf.keras.losses.cosine_similarity(summary_emb, doc_emb, axis=-1), trainable=True)
 
         # get candidate embedding
         candidate_num = candidate_id.shape[1]
@@ -53,19 +52,21 @@ class MatchSum(tf.keras.Model):
         # candidate_id = candidate_id.view(-1, candidate_id.size(-1))
         candidate_id = tf.reshape(candidate_id, shape = (-1, candidate_id.shape[-1]))
         input_mask = ~(candidate_id == pad_id)
-        out = self.encoder(candidate_id, attention_mask=input_mask)[0]
+        candidate_emb = self.encoder(candidate_id, attention_mask=input_mask)[0]
         # View is a pytorch tensor method. Could be changed with transpose?
-        candidate_emb = tf.reshape(out[:,0,:], shape = (batch_size, candidate_num, self.hidden_size))
+
+        candidate_emb = tf.reshape(candidate_emb[:,0,:], shape = (batch_size, candidate_num, self.hidden_size))
         # candidate_emb = out[:, 0, :].view(batch_size, candidate_num, self.hidden_size)  # [batch_size, candidate_num, hidden_size]
         #assert candidate_emb.shape == (batch_size, candidate_num, self.hidden_size)
         
         # get candidate score
         # These are pytorch tensor commands.
-        doc_emb = tf.expand_dims(doc_emb, axis=0).broadcast_to(candidate_emb.shape) # This could be the incorrect axis. Also uncertain about the broadcast to parameter input
+        doc_emb = tf.broadcast_to(tf.expand_dims(doc_emb, axis=0), tf.shape(candidate_emb)) # This could be the incorrect axis. Also uncertain about the broadcast to parameter input
         # doc_emb = doc_emb.unsqueeze(1).expand_as(candidate_emb)
         
         # tf.keras.metrics.CosineSimilarity or tf.keras.losses.CosineSimilarity
-        score = tf.keras.losses.cosine_similarity(candidate_emb, doc_emb, axis=-1) # [batch_size, candidate_num]
+        score = tf.Variable(tf.keras.losses.cosine_similarity(candidate_emb, doc_emb, axis=-1), trainable=True) # [batch_size, candidate_num]
         #assert score.shape == (batch_size, candidate_num)
 
-        return {'score': score, 'summary_score': summary_score}
+        pdb.set_trace()
+        return score, summary_score
