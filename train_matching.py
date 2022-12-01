@@ -10,7 +10,7 @@ from utils import read_jsonl, get_data_path, get_result_path
 
 from dataloader import MatchSumPipe
 from model import MatchSum
-from metrics import margin_ranking_loss, ValidMetric, MatchRougeMetric
+from metrics import MarginRankingLoss, ValidMetric, MatchRougeMetric
 from callback import MyCallback
 
 import tensorflow as tf
@@ -62,7 +62,7 @@ def train_model(args):
     # callbacks = [MyCallback(args), 
     #              SaveModelCallback(save_dir=args.save_path, top=5)]
     custom_callbacks = [MyCallback(max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)]
-    criterion = margin_ranking_loss(args.margin)
+    criterion = MarginRankingLoss(args.margin)
     #val_metric = [ValidMetric(save_path=args.save_path, data=read_jsonl(data_paths['val']))]
     
     assert args.batch_size % len(devices) == 0
