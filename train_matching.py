@@ -52,23 +52,25 @@ def train_model(args):
         json.dump(train_params, f, indent=4)
     print('Devices is:')
     print(devices)
+    
 
     # configure model
     model = MatchSum(args.candidate_num, args.encoder)
-    optimizer = tf.keras.optimizers.Adam( lr=0)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0)
     
     # callbacks = [MyCallback(args), 
     #              SaveModelCallback(save_dir=args.save_path, top=5)]
     custom_callbacks = [MyCallback(max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)]
     criterion = MarginRankingLoss(args.margin)
-    #val_metric = [ValidMetric(save_path=args.save_path, data=read_jsonl(data_paths['val']))]
-    
+    val_metric = ValidMetric(save_path=args.save_path, data=read_jsonl(data_paths['val']))
+
     assert args.batch_size % len(devices) == 0
     
     model.compile(
+        val_metric = val_metric, 
         optimizer = optimizer,
         loss = criterion,
-        #metrics = val_metric
+        # metrics = val_metric
     )
     print('Start training with the following hyper-parameters:')
     print(train_params)
@@ -90,7 +92,7 @@ def train_model(args):
         # steps_per_epoch=None,
         # validation_steps=None,
         # validation_batch_size=None,
-        validation_freq=args.valid_steps,
+        # validation_freq=args.valid_steps,
         # max_queue_size=10,
         # workers=1,
         # use_multiprocessing=False`
