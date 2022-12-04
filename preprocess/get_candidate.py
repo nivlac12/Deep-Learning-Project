@@ -1,6 +1,7 @@
 import os
+import pdb
 import argparse
-from os.path import join, exists
+from os.path import exists
 import subprocess as sp
 import json
 import tempfile
@@ -25,10 +26,10 @@ from transformers import BertTokenizer, RobertaTokenizer, DistilBertTokenizer
 
 MAX_LEN = 512
 
-_ROUGE_PATH = '/path/to/RELEASE-1.5.5'
+_ROUGE_PATH = 'C:\\Users\\nivla\\Documents\\CSCI_1470\\pyrouge-master\\tools\\ROUGE-1.5.5'
 
 #dot pulls on parent dir
-temp_path = './temp' # path to store some temporary files
+temp_path = 'temp' # path to store some temporary files
 
 #initialize lists
 original_data, sent_ids = [], []
@@ -41,7 +42,7 @@ def load_jsonl(data_path):
         # read all the lines out of it, handling one line at a time.
 
 
-        for line in f:
+        for idx, line in enumerate(f):
             #json.loads() method can be used 
             # to parse a valid JSON string and convert 
             # it into a Python Dictionary. It is mainly used for
@@ -49,8 +50,13 @@ def load_jsonl(data_path):
             # which consists of JSON data into Python Dictionary.
 
             #append to data list
+            if(idx > 99):
+                break
             data.append(json.loads(line))
     return data
+
+def join(x, y):
+    return os.path.join(x,y)
 
 def get_rouge(path, dec):
 
@@ -97,7 +103,8 @@ def get_rouge(path, dec):
             + ' -e {} '.format(join(_ROUGE_PATH, 'data'))
             + cmd
             + ' -a {}'.format(join(tmp_dir, 'settings.xml')))
-        output = sp.check_output(cmd.split(' '), universal_newlines=True)
+
+        output = sp.check_output(['perl'] + cmd.split(' '), universal_newlines=True)
 
         line = output.split('\n')
         rouge1 = float(line[3].split(' ')[3])
@@ -122,6 +129,9 @@ def get_candidates(tokenizer, cls, sep_id, idx):
     
     # load data
     data = {}
+    
+    print("idx is {}".format(idx))
+    print("text len is {}".format(len(original_data)))
     data['text'] = original_data[idx]['text']
     data['summary'] = original_data[idx]['summary']
     
@@ -162,7 +172,11 @@ def get_candidates(tokenizer, cls, sep_id, idx):
             #pulls sentence from orig document at the index j
             sent = data['text'][j]
             dec.append(sent)
-        score.append((i, get_rouge(idx_path, dec)))
+        try:
+            score.append((i, get_rouge(idx_path, dec)))
+        except UnicodeDecodeError:
+            print('Decode Error')
+            continue
     score.sort(key=lambda x : x[1], reverse=True)
     
     # write candidate indices and score
@@ -215,7 +229,7 @@ def get_candidates(tokenizer, cls, sep_id, idx):
     with open(join(processed_path, '{}.json'.format(idx)), 'w') as f:
         json.dump(data, f, indent=4) 
     
-    sp.call('rm -r ' + idx_path, shell=True)
+    shutil.rmtree(idx_path)
 
 def get_candidates_mp(args):
     
@@ -259,9 +273,17 @@ def get_candidates_mp(args):
     # use multi-processing to get candidate summaries
     start = time()
     print('start getting candidates with multi-processing !!!')
-    
+
+
+    for i in range(100):
+        get_candidates(tokenizer, cls, sep_id, i)
+
+    '''
     with mp.Pool() as pool:
-        list(pool.imap_unordered(get_candidates(tokenizer, cls, sep_id), range(n_files), chunksize=64))
+        pdb.set_trace()
+        list(pool.imap_unordered(get_candidates(tokenizer, cls, sep_id), range(n_files), chunksize=20))
+    '''
+    
     
     print('finished in {}'.format(timedelta(seconds=time()-start)))
     
@@ -287,6 +309,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Process truncated documents to obtain candidate summaries'
     )
+
+    # remove temp directory
+    import shutil
+    shutil.rmtree('temp')
 
     #Takes in arguments input into theparserwhen the script is run
     parser.add_argument('--tokenizer', type=str, required=True,
