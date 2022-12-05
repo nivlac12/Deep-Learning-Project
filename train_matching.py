@@ -12,7 +12,7 @@ from utils import read_jsonl, get_data_path, get_result_path
 from dataloader import MatchSumPipe
 from model import MatchSum
 from metrics import MarginRankingLoss, ValidMetric, MatchRougeMetric
-from callback import MyCallback
+from callback import MyLRSchedule
 
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
@@ -44,7 +44,7 @@ def train_model(args):
     # load summarization datasets
     #imported from dataloader.py file
     train_cand_dataset, train_text_dataset, train_summ_dataset = MatchSumPipe().process_from_file(data_paths['train'])
-    test_cand_dataset, test_text_dataset, test_summ_dataset = MatchSumPipe().process_from_file(data_paths['val'])
+    valid_cand_dataset, valid_text_dataset, valid_summ_dataset = MatchSumPipe().process_from_file(data_paths['val'])
     
     # configure training
     devices, train_params = configure_training(args)
@@ -56,11 +56,11 @@ def train_model(args):
 
     # configure model
     model = MatchSum(args.candidate_num, args.encoder)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=MyLRSchedule(0.0, max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)) # Learning rate may need to be changed depending on issues
     
     # callbacks = [MyCallback(args), 
     #              SaveModelCallback(save_dir=args.save_path, top=5)]
-    custom_callbacks = [MyCallback(max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)]
+    # custom_callbacks = [MyCallback(max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)]
     criterion = MarginRankingLoss(args.margin)
     val_metric = ValidMetric(save_path=args.save_path, data=read_jsonl(data_paths['val']))
 
@@ -81,11 +81,11 @@ def train_model(args):
         y=None,
         batch_size=args.batch_size,
         epochs=args.n_epochs,
-        verbose=1, # Can be changed
-        callbacks=custom_callbacks,
+        verbose=2, # Can be changed
+        # callbacks=custom_callbacks,
         # validation_split=0.0,
-        # validation_data=valid_set, # not sure what data structure this is
-        shuffle=True,
+        validation_data=[valid_text_dataset, valid_cand_dataset, valid_summ_dataset],
+        shuffle=False,
         # class_weight=None,
         # sample_weight=None,
         # initial_epoch=0,

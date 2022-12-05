@@ -58,8 +58,8 @@ class MatchSum(tf.keras.Model):
         diction['valid_metric'] = self.val_met.result()
         # Return a dict mapping metric names to current value
         # diction = {m.name: m.result() for m in self.metrics}
-        print(diction)
-        sys.exit(0)
+        # print(diction)
+        # sys.exit(0)
         # return {m.name: m.result() for m in self.metrics}
         return diction
 
