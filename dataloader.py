@@ -37,7 +37,7 @@ class MatchSumPipe():
 
                 cand_id_line = line['candidate_id']
                 # skip entries that don't line up
-                if len(cand_id_line) != 20:
+                if len(cand_id_line) != 20 or line['score'] == []:
                     continue
                 
                 # Truncate candidate id entries if necessary

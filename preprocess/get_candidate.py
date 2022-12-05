@@ -11,6 +11,8 @@ from datetime import timedelta
 import queue
 import logging
 from itertools import combinations
+from summarizer import Summarizer
+import shutil
 
 from cytoolz import curry
 
@@ -33,6 +35,9 @@ temp_path = 'temp' # path to store some temporary files
 
 #initialize lists
 original_data, sent_ids = [], []
+
+# summarizer object to split up sentences
+model = Summarizer('distilbert-base-uncased')
 
 def load_jsonl(data_path):
     data = []
@@ -80,18 +85,18 @@ def get_rouge(path, dec):
     dec_dir = join(path, 'decode')
     ref_dir = join(path, 'reference')
 
-    with open(join(dec_dir, '0.dec'), 'w') as f:
+    with open(join(dec_dir, '0.dec'), 'w', encoding='utf-8') as f:
         for sentence in dec:
             print(sentence, file=f)
 
     cmd = '-c 95 -r 1000 -n 2 -m'
+
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         #documentation: https://pypi.org/project/pyrouge/
         #To convert plain text summaries into a format ROUGE understands, do:
-        Rouge155.convert_summaries_to_rouge_format(
-            dec_dir, join(tmp_dir, 'dec'))
-        Rouge155.convert_summaries_to_rouge_format(
-            ref_dir, join(tmp_dir, 'ref'))
+        Rouge155.convert_summaries_to_rouge_format(dec_dir, join(tmp_dir, 'dec'))
+        Rouge155.convert_summaries_to_rouge_format(ref_dir, join(tmp_dir, 'ref'))
 
         #To generate the configuration file that ROUGE uses to match system and model summaries, do:
         Rouge155.write_config_static(
@@ -110,6 +115,7 @@ def get_rouge(path, dec):
         rouge1 = float(line[3].split(' ')[3])
         rouge2 = float(line[7].split(' ')[3])
         rougel = float(line[11].split(' ')[3])
+
     return (rouge1 + rouge2 + rougel) / 3
 
 @curry
@@ -132,8 +138,10 @@ def get_candidates(tokenizer, cls, sep_id, idx):
     
     print("idx is {}".format(idx))
     print("text len is {}".format(len(original_data)))
-    data['text'] = original_data[idx]['text']
-    data['summary'] = original_data[idx]['summary']
+
+    # convert text and summaries to lists of sentences for newsroom dataset
+    data['text'] = model.sentence_handler(original_data[idx]['text'], 15, 600)
+    data['summary'] = model.sentence_handler(original_data[idx]['summary'], 15, 600)
     
     # write reference summary to temporary files
     ref_dir = join(idx_path, 'reference')
@@ -168,6 +176,7 @@ def get_candidates(tokenizer, cls, sep_id, idx):
         i.sort()
         # write dec
         dec = []
+
         for j in i:
             #pulls sentence from orig document at the index j
             sent = data['text'][j]
@@ -275,7 +284,7 @@ def get_candidates_mp(args):
     print('start getting candidates with multi-processing !!!')
 
 
-    for i in range(100):
+    for i in range(n_files):
         get_candidates(tokenizer, cls, sep_id, i)
 
     '''
@@ -295,7 +304,7 @@ def get_candidates_mp(args):
         with open(args.write_path, 'a') as f:
             print(json.dumps(data), file=f)
     
-    os.system('rm -r {}'.format(temp_path))
+    shutil.rmtree(temp_path)
 
 if __name__ == '__main__':
     
@@ -311,8 +320,8 @@ if __name__ == '__main__':
     )
 
     # remove temp directory
-    import shutil
-    shutil.rmtree('temp')
+    if os.path.exists('temp'):
+        shutil.rmtree('temp')
 
     #Takes in arguments input into theparserwhen the script is run
     parser.add_argument('--tokenizer', type=str, required=True,
@@ -330,7 +339,7 @@ if __name__ == '__main__':
 
     #Assertion lines to ensure thatthe tokenizer selected is either burnt or Roberta
     #Assertion to check that the data path specified Exist
-    assert args.tokenizer in ['bert', 'roberta']
+    assert args.tokenizer in ['bert', 'roberta', 'distilbert']
     assert exists(args.data_path)
     assert exists(args.index_path)
 
