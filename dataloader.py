@@ -6,12 +6,13 @@ import tensorflow as tf
 
 class MatchSumPipe():
 
-    def __init__(self, max_len=100):
+    def __init__(self, max_len=100, num_samples=100):
         super(MatchSumPipe, self).__init__()
 
         self.sep_id = [102] # '[SEP]' (BERT)
 
         self.max_len = max_len
+        self.num_samples = num_samples
         
     def process_from_file(self, path):
 
@@ -31,7 +32,7 @@ class MatchSumPipe():
 
         with open(path, 'r', encoding='utf-8') as f:
             for line_idx, line in enumerate(f):
-                if line_idx > 100:
+                if line_idx > self.num_samples:
                     break
                 line = json.loads(line)
 
