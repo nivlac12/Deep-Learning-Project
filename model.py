@@ -31,11 +31,11 @@ class MatchSum(tf.keras.Model):
     def test_step(self, X): return self.batch_step(X, training=False)
  
     
-    def get_best_candidates(self, scores, candidate_sumaries):
-        m_idx = tf.cast(tf.argmax(score, axis = 0), dtype=tf.int32)
+    def get_best_candidates(self, scores, candidate_summaries):
+        m_idx = tf.cast(tf.argmax(scores, axis = 0), dtype=tf.int32)
         # batch, 1 the value 0-19
         # Issue place
-        best_candidates = indices[m_idx]
+        best_candidates = candidate_summaries[m_idx]
         
         return best_candidates
         
@@ -47,7 +47,7 @@ class MatchSum(tf.keras.Model):
     def batch_step(self, X, training):
         # Unpack the data. Its structure depends on your model and
         # on what you pass to `fit()`.
-        x1, x2, x3, candidate_sumaries, golden_summaries = X[0]
+        x1, x2, x3, candidate_summaries, golden_summaries = X[0]
         X = [x1, x2, x3]
 
         with tf.GradientTape() as tape:
@@ -66,7 +66,7 @@ class MatchSum(tf.keras.Model):
             self.optimizer.apply_gradients(zip(gradients, trainable_vars))
         else:
             best_cands = self.get_best_candidates(score, candidate_summaries)
-            self.complied_metrics.update_state(golden_summaries, best_cands)
+            self.compiled_metrics.update_state(golden_summaries, best_cands)
             diction = {m.name: m.result() for m in self.metrics}
             diction['loss'] = loss
             self.compiled_metrics.reset()
