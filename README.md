@@ -1,1 +1,1 @@
-This model summarizes a block of text. It is based on https://github.com/maszhongming/MatchSum, but uses TensorFlow instead of PyTorch.
+This model is based on https://github.com/maszhongming/MatchSum, but has been converted from Pytorch to Tensorflow.
