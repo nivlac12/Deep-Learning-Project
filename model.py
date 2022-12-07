@@ -5,14 +5,15 @@ from transformers.modeling_tf_bert import TFBertMainLayer
 from transformers import DistilBertConfig, BertConfig
 import sys
 from metrics import ValidMetric
+
+
 class MatchSum(tf.keras.Model):
     
     def __init__(self, candidate_num, encoder, hidden_size=768):
         super(MatchSum, self).__init__()
-        
         self.hidden_size = hidden_size
         self.candidate_num  = candidate_num
-        self.val_met = tf.metrics.Mean(name="ValidMetric")
+        # self.val_met = tf.metrics.Mean(name="ValidMetric")
         
         if encoder == 'distilbert':
             config = DistilBertConfig.from_pretrained('distilbert-base-uncased')
@@ -20,20 +21,34 @@ class MatchSum(tf.keras.Model):
         else:
             config = BertConfig.from_pretrained('distilbert-base-uncased')
             self.encoder = TFBertMainLayer(config, trainable=True)
-
-    def compile(self, val_metric, *args, **kwargs):
-        super().compile(*args, **kwargs)
-        print(val_metric)
-        self.met = val_metric
-
+    
+    # def compile(self, val_metric, *args, **kwargs):
+    #     super().compile(*args, **kwargs)
+        # print(val_metric)
+        # self.met = val_metric
 
     def train_step(self, X): return self.batch_step(X, training=True)
     def test_step(self, X): return self.batch_step(X, training=False)
+ 
+    
+    def get_best_candidates(self, scores, candidate_sumaries):
+        m_idx = tf.cast(tf.argmax(score, axis = 0), dtype=tf.int32)
+        # batch, 1 the value 0-19
+        # Issue place
+        best_candidates = indices[m_idx]
+        
+        return best_candidates
+        
+        # tf.map_fn(lambda x: , indices)
+        # tf.gather(indices, )
+        # indices[:][]
+        # tf.gather(, )
 
     def batch_step(self, X, training):
         # Unpack the data. Its structure depends on your model and
         # on what you pass to `fit()`.
-        X = X[0]
+        x1, x2, x3, candidate_sumaries, golden_summaries = X[0]
+        X = [x1, x2, x3]
 
         with tf.GradientTape() as tape:
             score, summary_score = self(X, training=True)  # Forward pass
@@ -41,28 +56,24 @@ class MatchSum(tf.keras.Model):
             # (the loss function is configured in `compile()`)
             loss = self.compiled_loss(score, summary_score, regularization_losses=self.losses)
         
-        self.met.evaluate(score)
-        self.val_met.update_state(self.met.result())
-
+        # diction = {'loss': loss}
         if training:
             # Compute gradients
+            diction = {'loss': loss}
             trainable_vars = self.trainable_variables
             gradients = tape.gradient(loss, trainable_vars)
             # Update weights
             self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        # Update metrics (includes the metric that tracks the loss)
-        # print(self.compiled_metrics)
-        # self.compiled_metrics.update_state(score, tf.ones(tf.shape(score)))
-        diction = {'loss': loss}
+        else:
+            best_cands = self.get_best_candidates(score, candidate_summaries)
+            self.complied_metrics.update_state(golden_summaries, best_cands)
+            diction = {m.name: m.result() for m in self.metrics}
+            diction['loss'] = loss
+            self.compiled_metrics.reset()
 
-        diction['valid_metric'] = self.val_met.result()
-        # Return a dict mapping metric names to current value
-        # diction = {m.name: m.result() for m in self.metrics}
-        # print(diction)
-        # sys.exit(0)
-        # return {m.name: m.result() for m in self.metrics}
         return diction
-
+    
+    @tf.function
     def call(self, X):
         text_id, candidate_id, summary_id = X
         batch_size = tf.shape(text_id)[0]

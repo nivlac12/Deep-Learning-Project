@@ -23,6 +23,8 @@ from rouge import Rouge
 
 _ROUGE_PATH = '/path/to/RELEASE-1.5.5'
 
+
+
 class MarginRankingLoss(tf.keras.losses.Loss):
 
     def __init__(self, margin=0.0):
@@ -55,8 +57,100 @@ class MarginRankingLoss(tf.keras.losses.Loss):
         TotalLoss += tf.math.reduce_mean(tf.maximum(0.0,-y*(pos_score - neg_score)+0.0))
         return TotalLoss
 
+# class ValidMetric(tf.keras.metrics.Metric):
+
+#     def __init__(self, save_path, data, batch_size, max_idx, name='ValidMetric', **kwargs):
+#         super(ValidMetric, self).__init__(name=name, **kwargs)
+#         self.save_path = save_path
+#         self.data = data
+
+#         self.top1_correct = 0
+#         self.top6_correct = 0
+#         self.top10_correct = 0
+            
+#         #create instance of Rouge from imported pkg
+#         self.rouge = Rouge()
+#         # self.ROUGE = 0.0
+#         self.Error = 0
+#         #I think cur_idx is the index of the current summary
+#         self.cur_idx = 0
+#         self.tot_rouge = 0.0
+#         self.max_idx = max_idx
+#         self.ROUGE = self.add_weight(name='Rouge', initializer='zeros')
+#         self.This_shit_better_work = 0
+
+#     def This_shit(self, X):
+#         self.This_shit_better_work += 1
+#         return 0
+
+#     def fast_rouge(self, dec, ref):
+#         if dec == '' or ref == '':
+#             return 0.0
+        
+#         #get rouge scoesr using dec and ref
+#         scores = self.rouge.get_scores(dec, ref)
+
+#         #seems to return rouge-1*2 + rouge-2/3 but I'm not sure
+#         return (scores[0]['rouge-1']['f'] + scores[0]['rouge-2']['f'] + scores[0]['rouge-l']['f']) / 3
+
+#     def update_state(self, y_true, y_pred, sample_weight=None):
+#         score = y_true
+#         batch_size = tf.shape(score)[0]
+#         self.top1_correct += tf.math.reduce_sum(tf.cast(tf.math.argmax(score, axis=1) == 0, dtype=tf.int32))
+#         self.top6_correct += tf.math.reduce_sum(tf.cast(tf.math.argmax(score, axis=1) <= 5, dtype=tf.int32))
+#         self.top10_correct += tf.math.reduce_sum(tf.cast(tf.math.argmax(score, axis=1) <= 9, dtype=tf.int32))
+
+#         # Fast ROUGE
+#         for i in range(batch_size):
+#             m_idx = tf.cast(tf.argmax(score[i], axis = 0), dtype=tf.int32)
+#             tf.map_fn(lambda x: self.This_shit(x), tf.range(m_idx))
+#             # max_idx = int(torch.max(score[i], dim=0).indices)
+#             print(self.This_shit_better_work)
+#             self.data[self.cur_idx]['indices'][self.This_shit_better_work]
+#             print("made it")
+#             # ext_idx = tf.gather(self.data[self.cur_idx]['indices'], m_idx)
+#             ext_idx = self.data[self.cur_idx]['indices'][self.This_shit_better_work]
+#             self.This_shit_better_work = 0
+#             ext_idx.sort()
+#             dec = []
+#             ref = ' '.join(self.data[self.cur_idx]['summary'])
+#             dec = tf.gather(self.data[self.cur_idx]['text'], ext_idx)
+#             # for j in ext_idx:
+#             #     dec.append(self.data[self.cur_idx]['text'][j])
+#             dec = ' '.join(dec)
+#             self.tot_rouge += self.fast_rouge(dec, ref)
+        
+#         self.ROUGE.assign(self.tot_rouge / self.cur_idx)
+#         self.cur_idx += 1
+
+#     def result(self):
+#         return self.ROUGE
+
+#     def reset_states(self):
+#         self.top1_correct = 0
+#         self.top6_correct = 0
+#         self.top10_correct = 0
+#         self.Error = 0
+#         self.cur_idx = 0
+#         self.tot_rouge = 0.0
+#         self.ROUGE.assign(0)
+
+# class ValidMetric():
+#     def __init__(self, save_path, data, batch_size, max_idx):
+#         # self.save_path = save_path
+#         self.cur_idx = 0
+        
+#     def evaluate(self, score):
+#         self.cur_idx += 1
+
+#     def result(self, reset=True): #reset=True):
+#         return self.cur_idx
+    
+#     def reset_state(self):
+#         pass
+
 class ValidMetric():
-    def __init__(self, save_path, data):
+    def __init__(self, save_path, data, batch_size, max_idx):
         # self.save_path = save_path
         self.data = data
 
@@ -66,10 +160,18 @@ class ValidMetric():
          
         #create instance of Rouge from imported pkg
         self.rouge = Rouge()
-        self.ROUGE = 0.0
+        self.ROUGE_val = 0.0
         self.Error = 0
         #I think cur_idx is the index of the current summary
         self.cur_idx = 0
+        self.batch_size = batch_size
+        self.max_idx = max_idx
+    
+        self.This_shit_better_work = 0
+
+    def This_shit(self, X):
+        self.This_shit_better_work += 1
+        return 0
     
     # an approximate method of calculating ROUGE
     def fast_rouge(self, dec, ref):
@@ -83,47 +185,70 @@ class ValidMetric():
         return (scores[0]['rouge-1']['f'] + scores[0]['rouge-2']['f'] + scores[0]['rouge-l']['f']) / 3
 
     def evaluate(self, score):
-        #batch_size is just the size of the score vector, which should give you
-        #the number of candidate
-        batch_size = tf.shape(score)[0]
+        # batch_size is just the size of the score vector, which should give you
+        # the number of candidate
+        # batch_size = tf.shape(score)[0]
 
         self.top1_correct += tf.math.reduce_sum(tf.cast(tf.math.argmax(score, axis=1) == 0, dtype=tf.int32))
         self.top6_correct += tf.math.reduce_sum(tf.cast(tf.math.argmax(score, axis=1) <= 5, dtype=tf.int32))
         self.top10_correct += tf.math.reduce_sum(tf.cast(tf.math.argmax(score, axis=1) <= 9, dtype=tf.int32))
 
-        # Fast ROUGE
-        for i in range(1):
-            
+        # Fast ROUGE  
+        # for i in range(self.batch_size):
+        for i in range(self.max_idx):
+            m_idx = tf.cast(tf.argmax(score[i], axis = 0), dtype=tf.int32)
+            # print(self.This_shit_better_work)
+            tf.map_fn(lambda x: self.This_shit(x), tf.range(m_idx))
+            # print(self.This_shit_better_work)
+            # q = 0
+            # for _ in tf.range(m_idx):
+            #     q+=1
+            # m_idx = q
             #replaced max_idx with 20 because the max num of sentences is always 20
-            ext_idx = self.data[self.cur_idx]['indices'][19]
+            # ext_idx = self.data[self.cur_idx]['indices'][self.This_shit_better_work]
+            ext_idx = self.data[i]['indices'][self.This_shit_better_work]
+
+            # print(This_shit_better_work)
+            self.This_shit_better_work = 0
             ext_idx.sort()
             dec = []
-            ref = ' '.join(self.data[self.cur_idx]['summary'])
+            # ref = ' '.join(self.data[self.cur_idx]['summary'])
+            ref = ' '.join(self.data[i]['summary'])
             for j in ext_idx:
-                dec.append(self.data[self.cur_idx]['text'][j])
+                # dec.append(self.data[self.cur_idx]['text'][j])
+                dec.append(self.data[i]['text'][j])
             dec = ' '.join(dec)
-            self.ROUGE += self.fast_rouge(dec, ref)
-            self.cur_idx += 1
+            # print(dec)
+            # print(ref)
+            self.ROUGE_val += self.fast_rouge(dec, ref)
+            # self.cur_idx += 1
+            # if self.cur_idx == self.max_idx:
+            #     break
 
-    def result(self, reset=True):
-        top1_accuracy = self.top1_correct / self.cur_idx
-        top6_accuracy = self.top6_correct / self.cur_idx
-        top10_accuracy = self.top10_correct / self.cur_idx
-        ROUGE = self.ROUGE / self.cur_idx
+    def result(self, reset=True): #reset=True):
+        # top1_accuracy = self.top1_correct / self.cur_idx
+        # top6_accuracy = self.top6_correct / self.cur_idx
+        # top10_accuracy = self.top10_correct / self.cur_idx
+        top1_accuracy = self.top1_correct / self.max_idx
+        top6_accuracy = self.top6_correct / self.max_idx
+        top10_accuracy = self.top10_correct / self.max_idx
+        ROUGE_ave = self.ROUGE_val / self.max_idx
         eval_result = {'top1_accuracy': top1_accuracy, 'top6_accuracy': top6_accuracy, 
-                       'top10_accuracy': top10_accuracy, 'Error': self.Error, 'ROUGE': ROUGE}
+                      'top10_accuracy': top10_accuracy, 'Error': self.Error, 'ROUGE': ROUGE_ave}
         # with open(join(self.save_path, 'train_info.txt'), 'a') as f:
         #     print('top1_accuracy = {}, top6_accuracy = {}, top10_accuracy = {}, Error = {}, ROUGE = {}'.format(
         #           top1_accuracy, top6_accuracy, top10_accuracy, self.Error, ROUGE), file=f)
+        # if self.cur_idx == self.max_idx:
         if reset:
             self.top1_correct = 0
             self.top6_correct = 0
             self.top10_correct = 0
-            self.ROUGE = 0.0
+            self.ROUGE_val = 0.0
             self.Error = 0
-            self.cur_idx = 0
+            # self.cur_idx = 0
+            # self.This_shit_better_work = 0
         #re-write eval_result so that it is simpler
-        eval_result = ROUGE
+        eval_result = ROUGE_ave
         return eval_result
         
 class MatchRougeMetric():
@@ -210,4 +335,3 @@ class MatchRougeMetric():
             with open(rouge_path, 'w') as f:
                 print(output, file=f)
         return R_1, R_2, R_L
-    

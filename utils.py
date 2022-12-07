@@ -4,11 +4,20 @@ import json
 
 #same fun as in preprocess. seems to turn each line of jsonl
 #file to different items fo the same list, in order
-def read_jsonl(path):
+def read_jsonl(path, num_samples=100):
     data = []
     with open(path) as f:
-        for line in f:
-            data.append(json.loads(line))
+        for line_idx, line in enumerate(f):
+        # for line in f:
+            if line_idx > num_samples:
+                break
+            line = json.loads(line)
+
+            cand_id_line = line['candidate_id']
+            # skip entries that don't line up
+            if len(cand_id_line) != 20 or line['score'] == []:
+                continue
+            data.append(line)
     return data
 
 #returns a dict of paths for the loc of .sonl data files for training,
