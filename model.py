@@ -47,7 +47,13 @@ class MatchSum(tf.keras.Model):
     def batch_step(self, X, training):
         # Unpack the data. Its structure depends on your model and
         # on what you pass to `fit()`.
-        x1, x2, x3, candidate_summaries, golden_summaries = X[0]
+
+        if training:
+            x1, x2, x3, candidate_summaries, golden_summaries = X[0]
+        else:
+            x1, x2, x3 = X[0]
+            candidate_summaries, golden_summaries = X[1]
+
         X = [x1, x2, x3]
         
         with tf.GradientTape() as tape:
@@ -68,12 +74,15 @@ class MatchSum(tf.keras.Model):
             self.compiled_metrics.update_state(golden_summaries, best_cands)
             diction = {m.name: m.result() for m in self.metrics}
             diction['loss'] = loss
-            self.compiled_metrics.reset()
+            pdb.set_trace()
+            for met in self.compiled_metrics._user_metrics:
+                met.reset_states()
 
         return diction
     
     @tf.function
     def call(self, X):
+        pdb.set_trace()
         text_id, candidate_id, summary_id = X
         batch_size = tf.shape(text_id)[0]
         # text_id = [1, 333]

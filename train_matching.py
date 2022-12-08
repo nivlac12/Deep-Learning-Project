@@ -32,7 +32,7 @@ def configure_training(args):
     return devices, params
 
 def train_model(args):
-    num_samples=100
+    num_samples=2
     # check if the data_path and save_path exists
     data_paths = get_data_path(args.mode, 'bert')
     print(data_paths)
@@ -64,7 +64,7 @@ def train_model(args):
     summaries = []
     for i in x:
         summaries.append(' '.join(i['summary']))
-    summaries = tf.convert_to_tensor(summaries)
+    val_summaries = tf.convert_to_tensor(summaries)
 
     candidate_summaries = []
     for i in x:
@@ -72,13 +72,13 @@ def train_model(args):
         lst = []
         indices = i['indices']
         text = i['text'] 
-        for ind in indices:
-            cand_sum = []
-            for j in ind:
-                cand_sum.append(text[j])
-            lst.append(' '.join(cand_sum))
-        candidate_summaries.append(lst)
-    candidate_summaries = tf.convert_to_tensor(candidate_summaries)
+        #for ind in indices:
+        cand_sum = []
+        for j in indices[0]:
+            cand_sum.append(text[j])
+        lst.append(' '.join(cand_sum))
+        candidate_summaries.append(' '.join(cand_sum))
+    val_candidate_summaries = tf.convert_to_tensor(candidate_summaries)
 
     x = read_jsonl(data_paths['train'], num_samples=num_samples)
 
@@ -112,11 +112,13 @@ def train_model(args):
     model.compile(
         optimizer = optimizer,
         loss = criterion,
-        metrics = [keras_nlp.metrics.RougeL(), keras_nlp.metrics.RougeN(order=2), keras_nlp.metrics.RougeN(order=1)]
+        metrics = [keras_nlp.metrics.RougeL(), keras_nlp.metrics.RougeN(order=2)]
     )
 
     print('Start training with the following hyper-parameters:')
     print(train_params)
+
+    pdb.set_trace()
 
     # pdb.set_trace()
     model.fit(
@@ -127,7 +129,7 @@ def train_model(args):
         verbose=2, # Can be changed
         # callbacks=[MyCallback()],
         # validation_split=0.0,
-        validation_data=[valid_text_dataset, valid_cand_dataset, valid_summ_dataset, candidate_summaries, summaries],
+        validation_data=[[valid_text_dataset, valid_cand_dataset, valid_summ_dataset], [val_candidate_summaries, val_summaries]],
         shuffle=False, # This could be something that is important
         # class_weight=None,
         # sample_weight=None,
@@ -213,21 +215,21 @@ if __name__ == '__main__':
     parser.add_argument('--encoder', required=True,
                         help='the encoder for matchsum (bert/roberta)', type=str)
 
-    parser.add_argument('--batch_size', default=16,
+    parser.add_argument('--batch_size', default=2,
                         help='the training batch size', type=int)
     parser.add_argument('--accum_count', default=2,
                         help='number of updates steps to accumulate before performing a backward/update pass', type=int)
-    parser.add_argument('--candidate_num', default=20,
+    parser.add_argument('--candidate_num', default=2,
                         help='number of candidates summaries', type=int)
     parser.add_argument('--max_lr', default=2e-5,
                         help='max learning rate for warm up', type=float)
     parser.add_argument('--margin', default=0.01,
                         help='parameter for MarginRankingLoss', type=float)
-    parser.add_argument('--warmup_steps', default=10000,
+    parser.add_argument('--warmup_steps', default=100,
                         help='warm up steps for training', type=int)
     parser.add_argument('--n_epochs', default=5,
                         help='total number of training epochs', type=int)
-    parser.add_argument('--valid_steps', default=1000,
+    parser.add_argument('--valid_steps', default=100,
                         help='number of update steps for validation and saving checkpoint', type=int)
 
     args = parser.parse_known_args()[0]
