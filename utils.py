@@ -32,7 +32,7 @@ def read_jsonl(path, num_samples=100):
     with open(path) as f:
         for line_idx, line in enumerate(f):
         # for line in f:
-            if line_idx > num_samples:
+            if line_idx >= num_samples:
                 break
             line = json.loads(line)
 
