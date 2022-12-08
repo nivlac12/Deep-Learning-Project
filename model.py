@@ -21,23 +21,28 @@ class MatchSum(tf.keras.Model):
             config = BertConfig.from_pretrained('distilbert-base-uncased')
             self.encoder = TFBertMainLayer(config, trainable=True)
 
+    @tf.function
     def train_step(self, X): return self.batch_step(X, training=True)
+    
+    @tf.function
     def test_step(self, X): return self.batch_step(X, training=False)
  
+    @tf.function
     def get_best_candidates(self, scores, candidate_summaries):
         max_score_idx = tf.argmax(scores, axis=1)
         best_candidates = tf.gather(params=candidate_summaries, indices=max_score_idx, axis=1, batch_dims=1)
         return best_candidates
 
+    @tf.function
     def batch_step(self, X, training):
-        candidate_summaries, golden_summaries = X[1]    
-        
+        candidate_summaries, golden_summaries = X[1]
         with tf.GradientTape() as tape:
             score, summary_score = self(X[0], training=True)  # Forward pass
             # Compute the loss value
             # (the loss function is configured in `compile()`)
             loss = self.compiled_loss(score, summary_score, regularization_losses=self.losses)
-        diction = {'loss': loss}
+        diction = {m.name: m.result() for m in self.metrics}
+
         if training:
             # Compute gradients 
             gradients = tape.gradient(loss, self.trainable_variables)
@@ -48,7 +53,6 @@ class MatchSum(tf.keras.Model):
             self.compiled_metrics.update_state(golden_summaries, best_cands)
             for m in self.compiled_metrics._user_metrics:
                 self.total_rouge.assign_add(m.result()['f1_score'])
-                m.reset_states()
             diction['averaged rouge f1_scores'] = tf.math.divide(self.total_rouge, 3.0)
             self.total_rouge.assign(0.0)
 
