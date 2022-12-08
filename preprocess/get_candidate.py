@@ -39,7 +39,7 @@ original_data, sent_ids = [], []
 # summarizer object to split up sentences
 model = Summarizer('distilbert-base-uncased')
 
-def load_jsonl(data_path):
+def load_jsonl(data_path, use_max=False, max_lines=1000):
     data = []
     with open(data_path) as f:
 
@@ -54,9 +54,10 @@ def load_jsonl(data_path):
             #  deserializing native string, byte, or byte array 
             # which consists of JSON data into Python Dictionary.
 
-            #append to data list
-            if(idx > 99):
+            if use_max and idx >= max_lines:
                 break
+
+            #append to data list
             data.append(json.loads(line))
     return data
 
@@ -137,7 +138,7 @@ def get_candidates(tokenizer, cls, sep_id, idx):
     data = {}
     
     print("idx is {}".format(idx))
-    print("text len is {}".format(len(original_data)))
+    #print("text len is {}".format(len(original_data)))
 
     # convert text and summaries to lists of sentences for newsroom dataset
     data['text'] = model.sentence_handler(original_data[idx]['text'], 15, 600)
@@ -147,6 +148,7 @@ def get_candidates(tokenizer, cls, sep_id, idx):
     ref_dir = join(idx_path, 'reference')
     with open(join(ref_dir, '0.ref'), 'w') as f:
         for sentence in data['summary']:
+            sentence = ''.join(char for char in sentence if ord(char) < 128)
             print(sentence, file=f)
 
     # get candidate summaries
@@ -265,46 +267,62 @@ def get_candidates_mp(args):
     #then repeats this pulling from the jsonl file only containing
     #the sentences deemed by BERTExt to be relevant
     #Pulls from the path specified by theargs parser when the file is run
-    original_data = load_jsonl(args.data_path)
-    sent_ids = load_jsonl(args.index_path)
 
-    #gets the total num of sentences in the 
-    n_files = len(original_data)
+    for key in args.data_files:
+        sent_ids = load_jsonl(args.index_files[key], use_max=True, max_lines=500)
 
-    #Assertion to ensure that the indices given for the sentences that were pulled out of the original document
-    #Is equal to the number of sentences that were pulled out of the original data
-    assert len(sent_ids) == len(original_data)
-    print('total {} documents'.format(n_files))
-    os.makedirs(temp_path)
-    processed_path = join(temp_path, 'processed')
-    os.makedirs(processed_path)
+        # limit the data by the size of sent_ids
+        original_data = load_jsonl(args.data_files[key], use_max=True, max_lines=len(sent_ids))
 
-    # use multi-processing to get candidate summaries
-    start = time()
-    print('start getting candidates with multi-processing !!!')
+        #gets the total num of lines in the file
+        n_files = len(original_data)
+
+        #Assertion to ensure that the indices given for the sentences that were pulled out of the original document
+        #Is equal to the number of sentences that were pulled out of the original data
+        assert len(sent_ids) == len(original_data)
+        print('total {} documents'.format(n_files))
+        os.makedirs(temp_path)
+        processed_path = join(temp_path, 'processed')
+        os.makedirs(processed_path)
+
+        # use multi-processing to get candidate summaries
+        start = time()
+        print('start getting candidates with multi-processing !!!')
 
 
-    for i in range(n_files):
-        get_candidates(tokenizer, cls, sep_id, i)
+        for i in range(n_files):
+            get_candidates(tokenizer, cls, sep_id, i)
 
-    '''
-    with mp.Pool() as pool:
-        pdb.set_trace()
-        list(pool.imap_unordered(get_candidates(tokenizer, cls, sep_id), range(n_files), chunksize=20))
-    '''
-    
-    
-    print('finished in {}'.format(timedelta(seconds=time()-start)))
-    
-    # write processed data
-    print('start writing {} files'.format(n_files))
-    for i in range(n_files):
-        with open(join(processed_path, '{}.json'.format(i))) as f:
-            data = json.loads(f.read())
-        with open(args.write_path, 'a') as f:
-            print(json.dumps(data), file=f)
-    
-    shutil.rmtree(temp_path)
+        '''
+        with mp.Pool() as pool:
+            pdb.set_trace()
+            list(pool.imap_unordered(get_candidates(tokenizer, cls, sep_id), range(n_files), chunksize=20))
+        '''
+        
+        
+        print('finished in {}'.format(timedelta(seconds=time()-start)))
+
+        # remove all information in the output files
+        for write_path in args.write_paths[key]:
+            with open(write_path, 'w') as f:
+                print('Clearing {}'.format(write_path))
+        
+        # write processed data
+        print('start writing {} files'.format(n_files))
+        for i in range(n_files):
+            # if this is the train dataset, split up the write path with ~70% train ~30% validation
+            write_path = ''
+            if key == 'train' and i >= n_files * 0.7:
+                write_path = args.write_paths['train'][1]
+            else:
+                write_path = args.write_paths[key][0]
+                
+            with open(join(processed_path, '{}.json'.format(i))) as f:
+                data = json.loads(f.read())
+            with open(write_path, 'a') as f:
+                print(json.dumps(data), file=f)
+        
+        shutil.rmtree(temp_path)
 
 if __name__ == '__main__':
     
@@ -325,13 +343,13 @@ if __name__ == '__main__':
 
     #Takes in arguments input into theparserwhen the script is run
     parser.add_argument('--tokenizer', type=str, required=True,
-        help='BERT/RoBERTa')
-    parser.add_argument('--data_path', type=str, required=True,
-        help='path to the original dataset, the original dataset should contain text and summary')
-    parser.add_argument('--index_path', type=str, required=True,
-        help='indices of the remaining sentences of the truncated document')
-    parser.add_argument('--write_path', type=str, required=True,
-        help='path to store the processed dataset')
+        help='BERT/RoBERTa/distilBERT')
+    # parser.add_argument('--data_path', type=str, required=True,
+    #     help='path to the original dataset, the original dataset should contain text and summary')
+    # parser.add_argument('--index_path', type=str, required=True,
+    #     help='indices of the remaining sentences of the truncated document')
+    # parser.add_argument('--write_path', type=str, required=True,
+    #     help='path to store the processed dataset')
 
     #The ArgumentParser.parse_args() method runs the parser and places the 
     # extracted data in a argparse.Namespace object:
@@ -340,8 +358,11 @@ if __name__ == '__main__':
     #Assertion lines to ensure thatthe tokenizer selected is either burnt or Roberta
     #Assertion to check that the data path specified Exist
     assert args.tokenizer in ['bert', 'roberta', 'distilbert']
-    assert exists(args.data_path)
-    assert exists(args.index_path)
+    #assert exists(args.data_path)
+    #assert exists(args.index_path)
 
     #Puts parser arguments into thefunction below
+    args.data_files = {'train': 'newsroom/train-stats.jsonl', 'test': 'newsroom/test-stats.jsonl'}
+    args.index_files = {'train': 'train_newsroom.jsonl', 'test': 'test_newsroom.jsonl'}
+    args.write_paths = {'train': ['newsroom/preprocessed/train_newsroom.jsonl', 'newsroom/preprocessed/val_newsroom.jsonl'], 'test': ['newsroom/preprocessed/test_newsroom.jsonl']}
     get_candidates_mp(args)

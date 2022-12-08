@@ -32,7 +32,7 @@ class MatchSumPipe():
 
         with open(path, 'r', encoding='utf-8') as f:
             for line_idx, line in enumerate(f):
-                if line_idx > self.num_samples:
+                if line_idx >= self.num_samples:
                     break
                 line = json.loads(line)
 
