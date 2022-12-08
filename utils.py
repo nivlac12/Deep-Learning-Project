@@ -1,6 +1,29 @@
 import os
 from os.path import exists, join
 import json
+import tensorflow as tf
+
+def get_all_summaries(path, num_samples=100):
+    json_file = read_jsonl(path, num_samples=num_samples)
+    golden_summaries = []
+    candidate_summaries = []
+
+    for article in json_file:
+        golden_summaries.append(' '.join(article['summary']))
+
+        article_cands = []
+        indices = article['indices']
+        text = article['text']
+
+        for cand_indices in indices:
+            cand_sum = []
+            for i in cand_indices:
+                cand_sum.append(text[i])
+            article_cands.append(' '.join(cand_sum))
+        candidate_summaries.append(article_cands)
+    
+
+    return tf.convert_to_tensor(golden_summaries), tf.convert_to_tensor(candidate_summaries)
 
 #same fun as in preprocess. seems to turn each line of jsonl
 #file to different items fo the same list, in order

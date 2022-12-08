@@ -9,7 +9,7 @@ import pdb
 import tensorflow as tf
 import keras_nlp
 
-from utils import read_jsonl, get_data_path, get_result_path
+from utils import read_jsonl, get_data_path, get_result_path, get_all_summaries
 
 from dataloader import MatchSumPipe
 from model import MatchSum
@@ -60,45 +60,8 @@ def train_model(args):
     # print('Devices is:')
     # print(devices)
     
-    x = read_jsonl(data_paths['val'], num_samples=num_samples)
-    summaries = []
-    for i in x:
-        summaries.append(' '.join(i['summary']))
-    val_summaries = tf.convert_to_tensor(summaries)
-
-    candidate_summaries = []
-    for i in x:
-        # i = a text
-        lst = []
-        indices = i['indices']
-        text = i['text'] 
-        #for ind in indices:
-        cand_sum = []
-        for j in indices[0]:
-            cand_sum.append(text[j])
-        lst.append(' '.join(cand_sum))
-        candidate_summaries.append(' '.join(cand_sum))
-    val_candidate_summaries = tf.convert_to_tensor(candidate_summaries)
-
-    x = read_jsonl(data_paths['train'], num_samples=num_samples)
-
-    summaries = []
-    for i in x:
-        summaries.append(' '.join(i['summary']))
-    train_summaries = tf.convert_to_tensor(summaries)
-
-    candidate_summaries = []
-    for i in x:
-        lst = []
-        indices = i['indices']
-        text = i['text']
-        for ind in indices:
-            cand_sum = []
-            for j in ind:
-                cand_sum.append(text[j])
-            lst.append(' '.join(cand_sum))
-        candidate_summaries.append(lst)
-    train_candidate_summaries = tf.convert_to_tensor(candidate_summaries)
+    train_summaries, train_candidate_summaries = get_all_summaries(data_paths['train'], num_samples=num_samples)
+    val_summaries, val_candidate_summaries = get_all_summaries(data_paths['val'], num_samples=num_samples)
 
     # configure model
     model = MatchSum(args.candidate_num, args.encoder)
@@ -112,24 +75,22 @@ def train_model(args):
     model.compile(
         optimizer = optimizer,
         loss = criterion,
-        metrics = [keras_nlp.metrics.RougeL(), keras_nlp.metrics.RougeN(order=2)]
+        metrics = [keras_nlp.metrics.RougeN(order=1, dtype=tf.float32, name='rouge-1'), keras_nlp.metrics.RougeN(order=2, dtype=tf.float32, name='rouge-2'), keras_nlp.metrics.RougeL(dtype=tf.float32, name='rouge-l')]
     )
 
     print('Start training with the following hyper-parameters:')
     print(train_params)
 
-    pdb.set_trace()
-
     # pdb.set_trace()
     model.fit(
-        x=[train_text_dataset, train_cand_dataset, train_summ_dataset, train_candidate_summaries, train_summaries], # not sure what data structure this is
-        y=None,
+        x=[train_text_dataset, train_cand_dataset, train_summ_dataset], # not sure what data structure this is
+        y=[train_candidate_summaries, train_summaries],
         batch_size=args.batch_size,
         epochs=args.n_epochs,
         verbose=2, # Can be changed
         # callbacks=[MyCallback()],
         # validation_split=0.0,
-        validation_data=[[valid_text_dataset, valid_cand_dataset, valid_summ_dataset], [val_candidate_summaries, val_summaries]],
+        validation_data=([valid_text_dataset, valid_cand_dataset, valid_summ_dataset], [val_candidate_summaries, val_summaries]),
         shuffle=False, # This could be something that is important
         # class_weight=None,
         # sample_weight=None,
