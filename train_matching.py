@@ -6,6 +6,8 @@ from time import time
 from datetime import timedelta
 from os.path import join, exists
 import pdb
+import tensorflow as tf
+import keras_nlp
 
 from utils import read_jsonl, get_data_path, get_result_path
 
@@ -14,8 +16,6 @@ from model import MatchSum
 from metrics import MarginRankingLoss, ValidMetric, MatchRougeMetric
 from callback import MyLRSchedule
 
-import tensorflow as tf
-from tensorflow.keras.optimizers import Adam
 
 def configure_training(args):
     devices = [int(gpu) for gpu in args.gpus.split(',')]
@@ -32,7 +32,7 @@ def configure_training(args):
     return devices, params
 
 def train_model(args):
-    
+    num_samples=100
     # check if the data_path and save_path exists
     data_paths = get_data_path(args.mode, 'bert')
     print(data_paths)
@@ -40,62 +40,105 @@ def train_model(args):
         assert exists(data_paths[name])
     if not exists(args.save_path):
         os.makedirs(args.save_path)
+
+    # data_paths = get_data_path(args.mode, 'bert')
+    # for name in data_paths:
+    #     assert exists(data_paths[name])
+    # if not exists(args.save_path):
+    #     os.makedirs(args.save_path)
     
     # load summarization datasets
     #imported from dataloader.py file
-    train_cand_dataset, train_text_dataset, train_summ_dataset = MatchSumPipe().process_from_file(data_paths['train'])
-    valid_cand_dataset, valid_text_dataset, valid_summ_dataset = MatchSumPipe().process_from_file(data_paths['val'])
+    train_cand_dataset, train_text_dataset, train_summ_dataset = MatchSumPipe(num_samples=num_samples).process_from_file(data_paths['train'])
+    valid_cand_dataset, valid_text_dataset, valid_summ_dataset = MatchSumPipe(num_samples=num_samples).process_from_file(data_paths['val'])
     
     # configure training
-    devices, train_params = configure_training(args)
+    # devices, train_params = configure_training(args)
+    _, train_params = configure_training(args)
     with open(join(args.save_path, 'params.json'), 'w') as f:
         json.dump(train_params, f, indent=4)
-    print('Devices is:')
-    print(devices)
+    # print('Devices is:')
+    # print(devices)
     
+    x = read_jsonl(data_paths['val'], num_samples=num_samples)
+    summaries = []
+    for i in x:
+        summaries.append(' '.join(i['summary']))
+    summaries = tf.convert_to_tensor(summaries)
+
+    candidate_summaries = []
+    for i in x:
+        # i = a text
+        lst = []
+        indices = i['indices']
+        text = i['text'] 
+        for ind in indices:
+            cand_sum = []
+            for j in ind:
+                cand_sum.append(text[j])
+            lst.append(' '.join(cand_sum))
+        candidate_summaries.append(lst)
+    candidate_summaries = tf.convert_to_tensor(candidate_summaries)
+
+    x = read_jsonl(data_paths['train'], num_samples=num_samples)
+
+    summaries = []
+    for i in x:
+        summaries.append(' '.join(i['summary']))
+    train_summaries = tf.convert_to_tensor(summaries)
+
+    candidate_summaries = []
+    for i in x:
+        lst = []
+        indices = i['indices']
+        text = i['text']
+        for ind in indices:
+            cand_sum = []
+            for j in ind:
+                cand_sum.append(text[j])
+            lst.append(' '.join(cand_sum))
+        candidate_summaries.append(lst)
+    train_candidate_summaries = tf.convert_to_tensor(candidate_summaries)
 
     # configure model
     model = MatchSum(args.candidate_num, args.encoder)
     optimizer = tf.keras.optimizers.Adam(learning_rate=MyLRSchedule(0.0, max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)) # Learning rate may need to be changed depending on issues
-    
-    # callbacks = [MyCallback(args), 
-    #              SaveModelCallback(save_dir=args.save_path, top=5)]
-    # custom_callbacks = [MyCallback(max_lr=args.max_lr, warmup_steps = args.warmup_steps, update_every = args.accum_count)]
-    criterion = MarginRankingLoss(args.margin)
-    val_metric = ValidMetric(save_path=args.save_path, data=read_jsonl(data_paths['val']))
 
-    assert args.batch_size % len(devices) == 0
+    criterion = MarginRankingLoss(args.margin)
+    # val_metric = ValidMetric(save_path=save_path, data=read_jsonl(data_paths['val']), batch_size=params['batch_size'], max_idx=valid_cand_dataset.shape[0])
+
+    # assert args.batch_size % len(devices) == 0
     
     model.compile(
-        val_metric = val_metric, 
         optimizer = optimizer,
         loss = criterion,
-        # metrics = val_metric
+        metrics = [keras_nlp.metrics.RougeL(), keras_nlp.metrics.RougeN(order=2), keras_nlp.metrics.RougeN(order=1)]
     )
+
     print('Start training with the following hyper-parameters:')
     print(train_params)
 
     # pdb.set_trace()
     model.fit(
-        x=[train_text_dataset, train_cand_dataset, train_summ_dataset], # not sure what data structure this is
+        x=[train_text_dataset, train_cand_dataset, train_summ_dataset, train_candidate_summaries, train_summaries], # not sure what data structure this is
         y=None,
         batch_size=args.batch_size,
         epochs=args.n_epochs,
         verbose=2, # Can be changed
-        # callbacks=custom_callbacks,
+        # callbacks=[MyCallback()],
         # validation_split=0.0,
-        validation_data=[valid_text_dataset, valid_cand_dataset, valid_summ_dataset],
-        shuffle=False,
+        validation_data=[valid_text_dataset, valid_cand_dataset, valid_summ_dataset, candidate_summaries, summaries],
+        shuffle=False, # This could be something that is important
         # class_weight=None,
         # sample_weight=None,
         # initial_epoch=0,
         # steps_per_epoch=None,
-        # validation_steps=None,
-        # validation_batch_size=None,
-        # validation_freq=args.valid_steps,
+        # validation_steps=1,
+        # validation_batch_size=valid_cand_dataset.shape[0],
+        # validation_freq=1,
         # max_queue_size=10,
         # workers=1,
-        # use_multiprocessing=False`
+        # use_multiprocessing=False
     )
     # trainer = Trainer(
     #   train_data=train_set,

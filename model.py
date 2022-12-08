@@ -35,7 +35,7 @@ class MatchSum(tf.keras.Model):
         m_idx = tf.cast(tf.argmax(scores, axis = 0), dtype=tf.int32)
         # batch, 1 the value 0-19
         # Issue place
-        best_candidates = candidate_summaries[m_idx]
+        best_candidates = tf.gather(candidate_summaries, m_idx)
         
         return best_candidates
         
@@ -49,13 +49,12 @@ class MatchSum(tf.keras.Model):
         # on what you pass to `fit()`.
         x1, x2, x3, candidate_summaries, golden_summaries = X[0]
         X = [x1, x2, x3]
-
+        
         with tf.GradientTape() as tape:
             score, summary_score = self(X, training=True)  # Forward pass
             # Compute the loss value
             # (the loss function is configured in `compile()`)
             loss = self.compiled_loss(score, summary_score, regularization_losses=self.losses)
-        
         # diction = {'loss': loss}
         if training:
             # Compute gradients
